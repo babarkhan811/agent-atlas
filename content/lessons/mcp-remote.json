@@ -1,0 +1,599 @@
+{
+  "id": "mcp-remote",
+  "path": "knowledge-protocols",
+  "order": 5,
+  "tier": "pro",
+  "category": "Protocols",
+  "title": "Remote MCP: Streamable HTTP and OAuth",
+  "summary": "How an AI app connects to an MCP server over the internet, logs in with OAuth, and keeps tokens from being misused.",
+  "seoTitle": "Remote MCP servers: Streamable HTTP and OAuth step by step",
+  "seoDescription": "Watch an MCP client discover a remote server's authorization server, log in with OAuth 2.1 and PKCE, and use an audience-bound token over Streamable HTTP.",
+  "objectives": [
+    "Describe how Streamable HTTP carries MCP messages and which headers every request needs.",
+    "Trace the OAuth flow an MCP client follows: 401, protected resource metadata, authorization server discovery, PKCE and the token request.",
+    "Explain audience-bound tokens and why token passthrough and confused-deputy setups are forbidden."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    {
+      "title": "MCP specification 2026-07-28: Streamable HTTP transport",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http"
+    },
+    {
+      "title": "MCP specification 2026-07-28: Authorization",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization"
+    },
+    {
+      "title": "MCP specification 2026-07-28: Authorization server discovery",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery"
+    },
+    {
+      "title": "MCP specification 2026-07-28: Client registration",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/client-registration"
+    },
+    {
+      "title": "MCP specification 2026-07-28: Authorization security considerations",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations"
+    },
+    {
+      "title": "MCP specification 2026-07-28: Key changes (changelog)",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/changelog"
+    },
+    {
+      "title": "RFC 9728: OAuth 2.0 Protected Resource Metadata",
+      "url": "https://datatracker.ietf.org/doc/html/rfc9728"
+    },
+    {
+      "title": "RFC 8707: Resource Indicators for OAuth 2.0",
+      "url": "https://www.rfc-editor.org/rfc/rfc8707.html"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "client",
+      "label": "MCP client",
+      "kind": "app",
+      "x": 12,
+      "y": 45
+    },
+    {
+      "id": "user",
+      "label": "You (browser)",
+      "kind": "user",
+      "x": 22,
+      "y": 88
+    },
+    {
+      "id": "server",
+      "label": "Remote MCP server",
+      "kind": "tool",
+      "x": 52,
+      "y": 45
+    },
+    {
+      "id": "as",
+      "label": "Authorization server",
+      "kind": "guard",
+      "x": 82,
+      "y": 14
+    },
+    {
+      "id": "api",
+      "label": "Ticket API",
+      "kind": "external",
+      "x": 88,
+      "y": 78
+    }
+  ],
+  "steps": [
+    {
+      "from": "client",
+      "to": "server",
+      "label": "POST /mcp",
+      "title": "A request without a token",
+      "text": "Over Streamable HTTP, every MCP message is its own HTTP POST to a single endpoint.",
+      "payload": [
+        [
+          "request",
+          "POST https://mcp.example.com/mcp",
+          "One MCP endpoint accepts every request as a separate POST."
+        ],
+        [
+          "MCP-Protocol-Version",
+          "2026-07-28",
+          "Must match the version in the body's _meta, or the server answers with a HeaderMismatch error."
+        ],
+        [
+          "Mcp-Method",
+          "tools/list",
+          "Copied from the JSON body so gateways can route without parsing it."
+        ],
+        [
+          "Accept",
+          "application/json, text/event-stream",
+          "The reply may be one JSON object or a short event stream for this request."
+        ],
+        [
+          "Authorization",
+          "(none yet)",
+          "No token, so the server will explain how to get one."
+        ]
+      ],
+      "depth": {
+        "beginner": "This time the MCP server is not a program on your laptop but a service on the internet, run by a company. Your AI app sends it a request over the web, the same way a browser loads a page. It hasn't logged in yet, so it is like walking up to an office door without a badge.",
+        "practitioner": "Streamable HTTP is MCP's standard remote transport. The client POSTs each JSON-RPC message to one endpoint and must send `Accept` with both JSON and event-stream types. Since 2026-07-28 it also mirrors key fields into headers: `MCP-Protocol-Version`, `Mcp-Method`, and for calls `Mcp-Name`. The server answers with plain JSON or an SSE stream scoped to this one request.",
+        "expert": "The older HTTP+SSE transport (2024-11-05) is deprecated and new implementations should not adopt it. This revision also removed protocol-level sessions (`Mcp-Session-Id`), the standalone GET stream and stream resumption, so a dropped stream means re-issuing the request with a new id. Servers must validate the `Origin` header to stop DNS-rebinding attacks and should bind to localhost when running locally."
+      },
+      "walk": {
+        "why": "Plain HTTP POSTs work through existing proxies, load balancers and firewalls, and header mirroring lets gateways route and rate-limit without reading request bodies.",
+        "wrong": "Servers that skip Origin validation can be reached by malicious web pages through DNS rebinding. Clients built for the deprecated transport may fail to connect.",
+        "example": "A SaaS company runs its MCP endpoint behind its normal API gateway, which routes `Mcp-Method: tools/call` traffic to a pool sized for slow tool calls."
+      }
+    },
+    {
+      "from": "server",
+      "to": "client",
+      "label": "401 Unauthorized",
+      "title": "The server says how to log in",
+      "text": "The 401 response points the client to the server's protected resource metadata.",
+      "payload": [
+        [
+          "status",
+          "401 Unauthorized",
+          "A valid token is required."
+        ],
+        [
+          "WWW-Authenticate",
+          "Bearer resource_metadata=\"https://mcp.example.com/.well-known/oauth-protected-resource\", scope=\"tickets:read\"",
+          "Where to find the server's metadata, and the scope this request needs."
+        ],
+        [
+          "session",
+          "(none)",
+          "There is no Mcp-Session-Id in this revision; each request is authorised on its own."
+        ]
+      ],
+      "predict": {
+        "question": "The server refused the request. How does the client find out which login service to use, with no prior configuration?",
+        "reveal": "From the 401 itself. The `WWW-Authenticate` header points to the server's Protected Resource Metadata, and that document lists the authorization server(s) to use."
+      },
+      "depth": {
+        "beginner": "The server politely refuses, but tells the app where to find instructions: \"Read this page to see who issues our badges, and you'll need the read-tickets permission.\" The app didn't need to know anything in advance; the server explains the way in.",
+        "practitioner": "An MCP server acts as an OAuth 2.1 resource server. On a request without a valid token it returns 401 with a `WWW-Authenticate: Bearer` challenge containing `resource_metadata` (the metadata URL) and usually `scope`. Clients must parse this header. If it lacks `resource_metadata`, they fall back to well-known URIs derived from the endpoint URL.",
+        "expert": "The spec tells clients to treat the challenged `scope` as authoritative for the current operation and to request scopes in this priority: the challenge's `scope`, otherwise `scopes_supported` from the metadata. Invalid or expired tokens also get 401; insufficient permissions get 403 with `error=\"insufficient_scope\"`."
+      },
+      "walk": {
+        "why": "Self-describing challenges mean a client can connect to a server it has never seen, without hand-configured login details.",
+        "wrong": "Servers that return 404 or generic errors instead of a proper 401 challenge leave clients unable to start the login flow.",
+        "example": "When you add a remote MCP server to an AI app by URL, the app typically opens a browser login page within seconds, driven entirely by this challenge."
+      }
+    },
+    {
+      "from": "client",
+      "to": "server",
+      "label": "GET metadata",
+      "title": "Read the protected resource metadata",
+      "text": "The server's metadata names its authorization server and the scopes it understands.",
+      "payload": [
+        [
+          "resource",
+          "\"https://mcp.example.com/mcp\"",
+          "The server's canonical URI. Tokens will be bound to it."
+        ],
+        [
+          "authorization_servers",
+          "[\"https://auth.example.com\"]",
+          "Where to get tokens. Must list at least one."
+        ],
+        [
+          "scopes_supported",
+          "[\"tickets:read\", \"tickets:write\"]",
+          "The minimal scopes for basic use; more can be requested later."
+        ],
+        [
+          "bearer_methods_supported",
+          "[\"header\"]",
+          "Tokens travel in the Authorization header, never in the URL."
+        ]
+      ],
+      "depth": {
+        "beginner": "The app reads the instruction page. It says: \"This server is mcp.example.com/mcp, badges are issued by auth.example.com, and the permissions available are read tickets and write tickets.\" Now the app knows exactly where to go next. Because this page is public and standard, any app can find it without special setup.",
+        "practitioner": "MCP servers must implement OAuth 2.0 Protected Resource Metadata (RFC 9728). The document's `resource` field is the server's canonical URI and `authorization_servers` lists one or more authorization servers; if several are listed, the client chooses and keeps separate credentials for each.",
+        "expert": "If the 401 lacked `resource_metadata`, clients try the path-specific well-known URI first (for example `/.well-known/oauth-protected-resource/mcp`), then the root. Client credentials are bound to the issuing authorization server: if the metadata starts pointing to a different one, clients must not reuse old credentials."
+      },
+      "walk": {
+        "why": "Separating the resource server from the authorization server lets companies reuse their existing identity provider for MCP.",
+        "wrong": "Clients that cache the authorization server forever miss changes, and reusing credentials with a different authorization server is explicitly forbidden.",
+        "example": "A company points its MCP server's metadata at the same identity provider its staff already use for single sign-on."
+      }
+    },
+    {
+      "from": "client",
+      "to": "as",
+      "label": "GET AS metadata",
+      "title": "Discover the authorization server",
+      "text": "The client fetches the authorization server's metadata and checks it supports what MCP requires.",
+      "payload": [
+        [
+          "url",
+          "https://auth.example.com/.well-known/oauth-authorization-server",
+          "RFC 8414 discovery; clients also try OpenID Connect discovery paths."
+        ],
+        [
+          "issuer",
+          "\"https://auth.example.com\"",
+          "Must exactly equal the issuer the client derived the URL from, or the document is rejected."
+        ],
+        [
+          "code_challenge_methods_supported",
+          "[\"S256\"]",
+          "PKCE support. If this field is missing, MCP clients must refuse to continue."
+        ],
+        [
+          "client_id_metadata_document_supported",
+          "true",
+          "The server accepts an HTTPS URL as client_id (Client ID Metadata Document)."
+        ],
+        [
+          "authorization_response_iss_parameter_supported",
+          "true",
+          "The server returns `iss` in the redirect so the client can detect mix-up attacks."
+        ]
+      ],
+      "depth": {
+        "beginner": "The app now visits the badge office's public information page. It checks the office is who it claims to be and that it uses a modern safety feature (a one-time secret check) before trusting it. If the safety feature is missing, the app walks away.",
+        "practitioner": "Clients must support both OAuth 2.0 Authorization Server Metadata (RFC 8414) and OpenID Connect discovery, trying well-known paths in a fixed order. They must confirm PKCE support through `code_challenge_methods_supported`. Client registration, in the spec's priority order, uses pre-registered details, then a Client ID Metadata Document if supported, then Dynamic Client Registration as a deprecated fallback.",
+        "expert": "The `issuer` check stops a malicious metadata host from impersonating an honest authorization server. With Client ID Metadata Documents, the client's `client_id` is an HTTPS URL to a JSON document listing `client_name` and `redirect_uris`; the authorization server fetches and validates it and should guard against SSRF while doing so."
+      },
+      "walk": {
+        "why": "Automatic discovery lets clients and authorization servers with no prior relationship work together safely, which is the normal case for MCP.",
+        "wrong": "Skipping the issuer or PKCE checks opens the door to mix-up and code-interception attacks.",
+        "example": "An AI app publishes one client metadata document at a fixed HTTPS URL and uses that URL as its client ID with every MCP authorization server it meets."
+      }
+    },
+    {
+      "from": "user",
+      "to": "as",
+      "label": "approve in browser",
+      "title": "You approve access",
+      "text": "The client opens your browser at the authorization server with PKCE, a resource indicator and the needed scope.",
+      "payload": [
+        [
+          "client_id",
+          "\"https://app.example.com/oauth/client.json\"",
+          "A Client ID Metadata Document URL. The server fetches it to learn the app's name and redirect URIs."
+        ],
+        [
+          "redirect_uri",
+          "\"http://127.0.0.1:3000/callback\"",
+          "Must match one listed in the client's metadata exactly."
+        ],
+        [
+          "code_challenge · method",
+          "hash of a secret · S256",
+          "PKCE: proves later that the same client finishes the flow."
+        ],
+        [
+          "resource",
+          "\"https://mcp.example.com/mcp\"",
+          "RFC 8707 resource indicator: the token will be valid only for this server."
+        ],
+        [
+          "scope",
+          "\"tickets:read\"",
+          "Taken from the 401 challenge: ask only for what is needed."
+        ],
+        [
+          "state",
+          "random value",
+          "Checked on return to reject forged redirects."
+        ]
+      ],
+      "depth": {
+        "beginner": "A browser window opens on the badge office's website. You log in as yourself and see which app wants access and what it wants to do: read your tickets. You click Allow. The app never sees your password; it only gets a temporary badge afterwards.",
+        "practitioner": "This is the OAuth 2.1 authorization code flow. The client creates a random `code_verifier`, sends its S256 hash as `code_challenge`, includes `resource` set to the MCP server's canonical URI, and records the expected issuer alongside the verifier and `state`. The authorization server authenticates you, shows a consent screen and redirects back with a code.",
+        "expert": "Redirect URIs must be localhost or HTTPS and match the registered ones exactly. Authorization servers should warn about localhost-only redirect URIs, since a metadata document cannot by itself prevent localhost impersonation, and must clearly show the redirect host on the consent screen."
+      },
+      "walk": {
+        "why": "The user consents in the identity provider's own page, so passwords never pass through the AI app.",
+        "wrong": "Requesting broad scopes up front trains users to approve everything; least-privilege requests with step-up later are safer.",
+        "example": "Connecting an AI app to a work ticketing system opens your company's normal single sign-on page, with the app's name and requested permissions shown."
+      }
+    },
+    {
+      "from": "as",
+      "to": "client",
+      "label": "code + iss",
+      "title": "The code comes back",
+      "text": "The browser is redirected to the client with a short-lived code and the issuer's identity.",
+      "payload": [
+        [
+          "code",
+          "\"a1b2c3…\"",
+          "Short-lived and single-use. Worthless without the PKCE verifier."
+        ],
+        [
+          "iss",
+          "\"https://auth.example.com\"",
+          "Compared with the recorded issuer before the code is used (RFC 9207)."
+        ],
+        [
+          "state",
+          "same random value",
+          "Must match what the client sent, or the response is discarded."
+        ]
+      ],
+      "depth": {
+        "beginner": "After you click Allow, the browser hands the app a one-time ticket stub, plus a note saying which badge office issued it. The app checks the note matches the office it chose, so a fake office can't slip it a forged stub.",
+        "practitioner": "Authorization servers should include `iss` in the redirect. Clients must validate a present `iss` against the issuer recorded before the redirect, using exact string comparison, and reject the response if the server advertised `iss` support but omitted it. Only then may the code be sent to a token endpoint.",
+        "expert": "This mitigates mix-up attacks, where a malicious authorization server tricks a client into sending an honest server's code to it. On mismatch, clients must not act on or display any error fields from the response. Validation applies equally to error responses."
+      },
+      "walk": {
+        "why": "Clients that talk to many authorization servers need a reliable way to know which one actually answered.",
+        "wrong": "Normalising URLs before comparing (lower-casing, trimming slashes) can let a look-alike issuer pass; the spec requires exact comparison.",
+        "example": "An AI app connected to several companies' MCP servers keeps each login attempt's expected issuer and rejects any redirect that names a different one."
+      }
+    },
+    {
+      "from": "client",
+      "to": "as",
+      "label": "POST /token",
+      "title": "Exchange the code for a token",
+      "text": "The client proves it started the flow and receives an access token bound to the MCP server.",
+      "payload": [
+        [
+          "grant_type",
+          "authorization_code",
+          "Standard code exchange."
+        ],
+        [
+          "code_verifier",
+          "the original random secret",
+          "The server hashes it and compares with the earlier code_challenge."
+        ],
+        [
+          "resource",
+          "\"https://mcp.example.com/mcp\"",
+          "Sent again so the token's audience is exactly this MCP server."
+        ],
+        [
+          "access_token",
+          "\"eyJ…\" (audience: mcp.example.com/mcp)",
+          "Short-lived and usable only at the server named in resource."
+        ],
+        [
+          "refresh_token",
+          "optional",
+          "Not guaranteed. Public clients receive rotated refresh tokens."
+        ]
+      ],
+      "depth": {
+        "beginner": "The app trades the ticket stub, plus the secret it made at the start, for a real badge. The badge is stamped \"valid at mcp.example.com only\" and expires soon. Even if someone stole it, they couldn't use it anywhere else.",
+        "practitioner": "The token request includes the `code_verifier` and the same `resource` value. The authorization server issues an access token whose audience is the MCP server. Clients must store tokens securely, send them only to the server they were issued for, and never put them in URLs.",
+        "expert": "Audience binding via RFC 8707 only helps if the authorization server supports it and resource servers check it; clients must send `resource` regardless. Prefer short token lifetimes, and request `offline_access` only when the authorization server lists it, since refresh tokens are at the server's discretion."
+      },
+      "walk": {
+        "why": "PKCE and audience binding together mean an intercepted code or a leaked token is far less useful to an attacker.",
+        "wrong": "Tokens without an audience can be replayed against other services that trust the same authorization server.",
+        "example": "An identity provider issues a token whose audience claim names only the ticket MCP server, so the company's HR API rejects it outright."
+      }
+    },
+    {
+      "from": "client",
+      "to": "server",
+      "label": "POST /mcp + Bearer",
+      "title": "Call the server with the token",
+      "text": "Every HTTP request now carries the token, and the server checks it was issued for itself.",
+      "payload": [
+        [
+          "Authorization",
+          "Bearer eyJ…",
+          "Required on every HTTP request to the server; never in the query string."
+        ],
+        [
+          "Mcp-Method · Mcp-Name",
+          "tools/call · create_ticket",
+          "Routing headers; the server checks they match the body."
+        ],
+        [
+          "audience check",
+          "aud = https://mcp.example.com/mcp",
+          "The server must reject tokens issued for any other resource."
+        ],
+        [
+          "scope check",
+          "tickets:write needed → 403 insufficient_scope",
+          "If more permission is needed, the server replies 403 with the required scopes (step-up)."
+        ]
+      ],
+      "depth": {
+        "beginner": "The app tries again, this time showing its badge with every request. The server checks the badge was made for it and that it allows the action. Creating a ticket needs the write permission, which the app doesn't have yet, so the server says which extra permission is needed and the app asks you again.",
+        "practitioner": "Servers validate the token (signature or introspection, expiry, audience) on every request and return 401 for invalid tokens. When a token lacks a needed scope, the server returns 403 with `WWW-Authenticate: Bearer error=\"insufficient_scope\", scope=\"…\"`. The client then runs a step-up flow, requesting the union of previous and newly required scopes, with a retry limit.",
+        "expert": "Servers should include all scopes needed for the operation in one challenge rather than drip-feeding them. Because `tools/list` may vary with authorization, a server can hide write tools from read-only tokens. Header-body consistency checks (`HeaderMismatch`, -32020) stop attacks where a gateway routes on headers but the server executes the body."
+      },
+      "walk": {
+        "why": "Checking audience and scope on every request keeps a stateless server secure without any session memory.",
+        "wrong": "Accepting any token from the same identity provider lets tokens meant for one service unlock another.",
+        "example": "A read-only connection lists ticket tools but gets a 403 the first time it tries to create one, triggering a second consent screen for write access."
+      }
+    },
+    {
+      "from": "server",
+      "to": "api",
+      "label": "own token",
+      "title": "The server uses its own credential",
+      "text": "To reach the ticket API, the MCP server uses a separate token. It never forwards the client's token.",
+      "payload": [
+        [
+          "Authorization",
+          "Bearer <the MCP server's own ticket-API token>",
+          "A separate token issued to the MCP server for the upstream API."
+        ],
+        [
+          "forbidden",
+          "never the client's token",
+          "Token passthrough is forbidden: the server must not forward the token it received."
+        ],
+        [
+          "audit",
+          "user a.khan via app.example.com",
+          "Record on whose behalf, and through which client, the call was made."
+        ]
+      ],
+      "predict": {
+        "question": "Why can't the MCP server simply forward the user's access token to the ticket API?",
+        "reveal": "That token was issued for the MCP server, so a correct API should reject it, and accepting passed-through tokens bypasses the API's own controls and breaks audit trails. The MCP spec explicitly forbids token passthrough."
+      },
+      "depth": {
+        "beginner": "Behind the scenes, the MCP server talks to the actual ticket system. It does not hand over your badge from the app; it uses its own separate pass for that system. Each door checks only badges made for that door, which keeps a lost badge from opening everything.",
+        "practitioner": "If the MCP server calls upstream APIs it acts as an OAuth client to them, with tokens issued by the upstream's authorization server. The spec says servers must not pass through the token received from the MCP client and must only accept tokens issued for themselves.",
+        "expert": "MCP proxy servers that use a static client ID with a third-party authorization server are a confused-deputy risk: an attacker can ride on consent the user gave earlier. The spec requires such proxies to obtain user consent for each dynamically registered client before forwarding to the third party."
+      },
+      "walk": {
+        "why": "Separate tokens per hop keep each system's access control meaningful and make every action traceable to a user and a client.",
+        "wrong": "Token passthrough lets an attacker who steals one token reach every API that accepts it, while logs show the MCP server as the actor.",
+        "example": "A company's ticket MCP server exchanges the user's identity for a narrowly scoped ticket-API token through its identity provider rather than forwarding the original token."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Follow a remote MCP connection from the first refused request to a safe, audience-bound token, as defined by the 2026-07-28 specification.",
+    "thirtySeconds": [
+      "Remote MCP servers use Streamable HTTP: each message is a POST to one endpoint, with version and method mirrored into headers.",
+      "Login uses OAuth 2.1: a 401 points to protected resource metadata, which names the authorization server; the client uses PKCE and a resource indicator.",
+      "Tokens are bound to one MCP server, checked on every request, and never passed through to other APIs."
+    ],
+    "whyItMatters": "Local MCP servers run on your machine with your environment's credentials. Remote servers are different: they serve many users over the internet and must know who is calling and what they may do. Getting authorization right is what separates a useful company-wide AI integration from an open door. The MCP specification builds on OAuth standards so security teams can apply familiar controls, but only if every step is implemented correctly.",
+    "analogy": "It works like visiting a secure office. The front door tells you which badge office to visit; the badge office checks your identity and gives you a badge that works only in that building and expires tonight. Inside, staff who need other buildings use their own passes, never yours.",
+    "audience": "Developers building or connecting remote MCP servers, identity and security engineers reviewing OAuth configurations, and platform teams running AI integrations at company scale.",
+    "minutes": 20,
+    "prerequisites": [
+      "mcp"
+    ],
+    "deepDives": [
+      {
+        "title": "What changed in Streamable HTTP in 2026-07-28",
+        "body": "The revision removed protocol-level sessions and the `Mcp-Session-Id` header, the separate GET stream, and stream resumption. Every request carries its own metadata and authorization, so any server instance can answer it.\n\nIt added required headers (`MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` for calls and reads) so gateways can route requests, and servers must reject requests whose headers don't match the body. Long-lived change notifications use a `subscriptions/listen` request instead."
+      },
+      {
+        "title": "PKCE in one paragraph",
+        "body": "Proof Key for Code Exchange protects the authorization code. The client invents a random secret (the verifier), sends only its SHA-256 hash (the challenge) when starting login, and later sends the secret itself when exchanging the code. Someone who intercepts the code cannot use it without the secret. MCP clients must use the S256 method and must refuse to proceed if the authorization server does not advertise PKCE support."
+      },
+      {
+        "title": "Audience binding and token passthrough",
+        "body": "The `resource` parameter (RFC 8707) tells the authorization server which MCP server the token is for, and the server must reject tokens meant for anyone else.\n\nToken passthrough is the anti-pattern of forwarding a received token to another API. It is forbidden because it bypasses the downstream API's checks and makes logs misleading."
+      }
+    ],
+    "production": [
+      {
+        "title": "Missing Origin validation",
+        "body": "A server that ignores the `Origin` header can be reached by malicious web pages via DNS rebinding, especially when running on localhost. Validate Origin, bind local servers to 127.0.0.1 and require authentication."
+      },
+      {
+        "title": "Over-broad scopes",
+        "body": "Requesting every scope up front leads users to approve more than needed. Keep `scopes_supported` minimal and use step-up authorization with 403 `insufficient_scope` for sensitive tools."
+      },
+      {
+        "title": "Proxies and confused deputies",
+        "body": "MCP servers that front third-party APIs with a shared client ID can let one client ride on another user's consent. Require per-client consent, use separate upstream tokens, and log the user and client behind every call."
+      },
+      {
+        "title": "Token storage and lifetime",
+        "body": "Stolen tokens look like legitimate requests. Store tokens securely, never log them, prefer short lifetimes, and rely on refresh-token rotation for public clients."
+      }
+    ],
+    "lab": {
+      "title": "Validate a remote MCP request",
+      "intro": "Implement the server-side checks from this lesson: required Streamable HTTP headers, header-body consistency (`HeaderMismatch`, -32020), a 401 challenge with `resource_metadata`, audience and scope checks with a 403 `insufficient_scope` challenge, plus a PKCE S256 verifier check. Runs offline in Python and TypeScript with tests.",
+      "dir": "labs/mcp-remote"
+    },
+    "takeaways": [
+      "Streamable HTTP sends each MCP message as its own POST, with version and method mirrored into headers.",
+      "A 401 challenge points to protected resource metadata, which names the authorization server to use.",
+      "Clients must use PKCE (S256), send the `resource` parameter, and validate the issuer before redeeming a code.",
+      "Servers must check every token's audience and scope, and answer 403 `insufficient_scope` for step-up.",
+      "Never pass a received token through to another API; use a separate upstream credential."
+    ],
+    "faq": [
+      {
+        "q": "Is the old HTTP+SSE transport still allowed?",
+        "a": "It is deprecated and kept only for backwards compatibility. New implementations should use Streamable HTTP, which the spec describes as its replacement."
+      },
+      {
+        "q": "Do local stdio servers use this OAuth flow?",
+        "a": "No. The spec says stdio implementations should not follow the HTTP authorization flow and should take credentials from the environment instead."
+      },
+      {
+        "q": "What is a Client ID Metadata Document?",
+        "a": "An HTTPS URL used as the OAuth `client_id` that points to a JSON document with the client's name and redirect URIs. It lets clients and authorization servers with no prior relationship work together, and it replaces Dynamic Client Registration, which is now deprecated."
+      },
+      {
+        "q": "Why did MCP remove sessions?",
+        "a": "So that any server instance can answer any request. Each request now carries its own version, capabilities and token, which suits load-balanced, internet-scale servers."
+      }
+    ],
+    "related": [
+      "mcp",
+      "a2a",
+      "tool-use",
+      "human-in-loop"
+    ]
+  },
+  "quiz": [
+    {
+      "q": "How does an MCP client find the authorization server for a remote server it has never seen?",
+      "options": [
+        "From a hard-coded list",
+        "From the 401 WWW-Authenticate header and the protected resource metadata it points to",
+        "By asking the model",
+        "From the Mcp-Session-Id"
+      ],
+      "answer": 1,
+      "explain": "The 401 challenge includes `resource_metadata`; that document's `authorization_servers` field names where to get tokens."
+    },
+    {
+      "q": "What must an MCP client do if the authorization server metadata has no `code_challenge_methods_supported`?",
+      "options": [
+        "Use the plain PKCE method",
+        "Skip PKCE",
+        "Refuse to proceed",
+        "Switch to Dynamic Client Registration"
+      ],
+      "answer": 2,
+      "explain": "Missing PKCE support means the client must refuse to continue; MCP requires S256 PKCE."
+    },
+    {
+      "q": "Why does the client send the `resource` parameter?",
+      "options": [
+        "To choose a transport",
+        "To bind the token's audience to one MCP server",
+        "To request a refresh token",
+        "To register the client"
+      ],
+      "answer": 1,
+      "explain": "RFC 8707 resource indicators bind the token to the named server, which must reject tokens issued for others."
+    },
+    {
+      "q": "The MCP server needs to call an upstream ticket API. Which token should it use?",
+      "options": [
+        "The token it received from the client",
+        "Its own token issued for the upstream API",
+        "No token",
+        "The user's password"
+      ],
+      "answer": 1,
+      "explain": "Token passthrough is forbidden. The server acts as its own OAuth client to the upstream API."
+    },
+    {
+      "q": "A token is valid but lacks a needed scope. What should the server return?",
+      "options": [
+        "401 Unauthorized",
+        "403 with error=\"insufficient_scope\" and the required scopes",
+        "404 Not Found",
+        "200 with an empty result"
+      ],
+      "answer": 1,
+      "explain": "403 `insufficient_scope` tells the client exactly which scopes to request in a step-up flow."
+    }
+  ]
+}

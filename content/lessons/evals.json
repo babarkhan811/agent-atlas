@@ -1,11 +1,45 @@
 {
   "id": "evals",
   "path": "reliable-agents",
-  "order": 5,
+  "order": 6,
   "tier": "pro",
   "category": "Production",
   "title": "Testing agents with evals",
   "summary": "You can't unit-test a vibe. Evals score an agent on real tasks so changes don't silently make it worse.",
+  "seoTitle": "Evals for AI agents: code checks, LLM judges and regression gates",
+  "seoDescription": "Learn to evaluate AI agents: build a task set, grade with code checks and calibrated LLM judges, measure reliability over repeated runs and block regressions in CI.",
+  "objectives": [
+    "Build an evaluation set from real tasks, including edge cases and past failures.",
+    "Choose between code-based checks, LLM judges and human review for each quality you care about.",
+    "Use pass rates, repeated-run reliability and cost to block regressions before release."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    {
+      "title": "Anthropic: Create strong empirical evaluations",
+      "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+    },
+    {
+      "title": "OpenAI: Evals guide",
+      "url": "https://developers.openai.com/api/docs/guides/evals"
+    },
+    {
+      "title": "Zheng et al. (2023): Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena",
+      "url": "https://arxiv.org/abs/2306.05685"
+    },
+    {
+      "title": "Yao et al. (2024): τ-bench, a benchmark for tool-agent-user interaction (pass^k)",
+      "url": "https://arxiv.org/abs/2406.12045"
+    },
+    {
+      "title": "Chen et al. (2021): Evaluating Large Language Models Trained on Code (pass@k)",
+      "url": "https://arxiv.org/abs/2107.03374"
+    },
+    {
+      "title": "Anthropic: How we built our multi-agent research system (rubric-based LLM judge)",
+      "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+    }
+  ],
   "nodes": [
     {
       "id": "cases",
@@ -53,15 +87,35 @@
       "payload": [
         [
           "case",
-          "\"Refund order #5521 (damaged item)\"",
-          ""
+          "\"Refund order #5521 (damaged item, photo attached)\"",
+          "A real-looking task, ideally taken from anonymised production traffic."
         ],
         [
           "expected",
-          "refund issued · customer emailed · ≤ $200",
-          ""
+          "refund issued · customer emailed · amount ≤ order total",
+          "Checkable success conditions, not an exact reply text."
+        ],
+        [
+          "tags",
+          "refunds · has_attachment · edge_case",
+          "Tags let you see which kinds of task regress."
+        ],
+        [
+          "set_size",
+          "120 cases (illustrative)",
+          "Start small and grow; many cases with automatic grading beat a few hand-graded ones."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "An eval (short for evaluation) is an exam for your AI agent. You collect a fixed set of realistic tasks, such as \"refund this damaged order\", and write down what a good outcome looks like. Then you run the agent on every task and mark its work. Because the exam stays the same, you can tell whether a change to the agent made it better or worse.",
+        "practitioner": "Build the set from real traffic where possible, and include edge cases: missing data, very long inputs, ambiguous requests and past failures. Anthropic's guidance is to be task-specific, automate grading where possible and favour volume: more cases with slightly noisier automated grading generally beat a few hand-graded ones. Tag cases so results can be broken down by type.",
+        "expert": "Keep a held-out set you never tune prompts against, or you will overfit to the exam. Version the dataset alongside prompts and code. For agents, define success on outcomes and side effects, such as the database state after the run, rather than on the final message alone. Remove personal data before cases enter the repository."
+      },
+      "walk": {
+        "why": "A stable, realistic task set is the only way to compare versions of an agent fairly.",
+        "wrong": "Sets built only from easy, invented examples pass every time and miss the failures users actually hit.",
+        "example": "Support teams often seed eval sets with tickets the previous version handled badly, so those exact failures can never return unnoticed."
+      }
     },
     {
       "from": "agent",
@@ -73,76 +127,330 @@
         [
           "called issue_refund",
           "✓",
-          ""
+          "Inspects the trace: did the agent use the right tool?"
         ],
         [
-          "amount ≤ 200",
+          "amount ≤ order total",
           "✓",
-          ""
+          "A business rule checked exactly, no model needed."
+        ],
+        [
+          "no forbidden tools",
+          "✓",
+          "Safety check: for example, the agent never called delete_account."
         ],
         [
           "turns ≤ 10",
           "✓ (6)",
-          ""
+          "Efficiency check against a budget."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Some things can be marked automatically with simple rules, like an answer key: did the agent use the refund tool, was the amount no bigger than the order, did it avoid forbidden actions, did it finish in a reasonable number of steps? These checks are fast, cheap and never disagree with themselves.",
+        "practitioner": "Code-based grading inspects the trace and the resulting state: tools called and their arguments, schema validity, business rules, database changes, tests passing, token and step budgets. Prefer code checks whenever the property can be expressed exactly; they are deterministic and nearly free to run on every change.",
+        "expert": "Check side effects in a sandboxed environment rather than parsing the agent's claims; an agent saying \"refund issued\" is not evidence. Include negative checks for unsafe behaviour, such as forbidden tools or data leaving allowed systems. Keep checks independent of incidental details, like exact wording, so harmless changes do not fail the suite."
+      },
+      "walk": {
+        "why": "Deterministic checks give a reliable signal at almost no cost and catch the most serious errors.",
+        "wrong": "Checking exact output text makes evals brittle. Trusting the agent's own success message hides real failures.",
+        "example": "Coding agents are commonly scored by running the project's unit tests on the code they produce, a fully code-based check."
+      },
+      "predict": {
+        "question": "The agent's final message says \"Refund issued!\". Is that enough to pass the refund check?",
+        "reveal": "No. Check the actual state, such as the payments sandbox showing one refund of the right amount. Agents can claim success without achieving it."
+      }
     },
     {
       "from": "agent",
       "to": "judge",
       "label": "reply",
       "title": "Use a model for fuzzy qualities",
-      "text": "For tone, helpfulness or accuracy, a second model grades against a written rubric. Spot-check the judge against human ratings.",
+      "text": "For tone, helpfulness or accuracy of free text, a second model grades against a written rubric.",
       "payload": [
         [
           "rubric",
-          "polite · explains next steps · no false promises",
-          ""
+          "polite · explains next steps · no promises beyond policy",
+          "Explicit, specific criteria. Vague rubrics give noisy scores."
         ],
         [
-          "score",
-          "4 / 5",
-          ""
+          "inputs",
+          "task + agent reply + policy excerpt",
+          "The judge needs the same context a human grader would."
+        ],
+        [
+          "output",
+          "{ score: 4, pass: true, reasoning: \"…\" }",
+          "Structured verdict, with reasoning to audit disagreements."
+        ],
+        [
+          "judge_model",
+          "different from the agent's model where possible",
+          "Reduces the risk of a model favouring its own style."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Some qualities, like politeness or whether an explanation is clear, are hard to check with simple rules. For those, a second AI model acts as a marker with a detailed marking scheme. It reads the agent's reply and gives a score with reasons. You still check a sample of its marks against human ones, because AI markers make mistakes too.",
+        "practitioner": "LLM-as-judge works best with specific rubrics, the relevant context, and a structured output such as score plus pass or fail. Anthropic suggests grading with a different model from the one that produced the output when possible. Calibrate the judge: have humans grade a sample and measure agreement before trusting its scores.",
+        "expert": "Zheng et al. (2023) found strong LLM judges can exceed 80% agreement with human preferences, about the level humans agree with each other, but documented position, verbosity and self-enhancement biases. Mitigate with randomised option order, length-neutral rubrics, reasoning before scores, and periodic human audits. Version the judge prompt; changing it changes your metric."
+      },
+      "walk": {
+        "why": "Model judges scale qualitative grading to hundreds of cases, which humans cannot do on every change.",
+        "wrong": "Uncalibrated judges reward long, confident answers, or quietly drift when the judge model or prompt changes.",
+        "example": "Anthropic describes grading research outputs with a single LLM call against a rubric covering factual accuracy, citations, completeness, source quality and tool efficiency."
+      }
     },
     {
       "from": "judge",
       "to": "dash",
       "label": "scores",
       "title": "Aggregate",
-      "text": "",
+      "text": "Results roll up into a few numbers per version, broken down by tag.",
       "payload": [
         [
           "pass rate",
-          "91% (was 94%)",
-          "A drop: something regressed."
+          "91% (was 94%) — illustrative",
+          "Share of cases passing all checks. A drop signals a regression."
+        ],
+        [
+          "pass^3",
+          "78% — illustrative",
+          "Share of cases that pass in all 3 repeated runs: a measure of reliability."
         ],
         [
           "avg cost",
-          "$0.031 / task",
-          ""
+          "$0.031 / task — illustrative",
+          "Quality gains that double cost may not be worth it."
         ],
         [
           "p95 latency",
-          "18s",
-          ""
+          "18 s — illustrative",
+          "Slowest 5% of runs; users notice these."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "All the marks are added up into a few simple numbers: how many tasks passed, how reliably, how much each cost and how long the slow ones took. Comparing these numbers with the previous version shows straight away whether the agent got better or worse. Here, the pass rate dropped from 94% to 91%, which is a warning sign.",
+        "practitioner": "Report pass rate overall and per tag, plus cost and latency. Because agents are not deterministic, run each case several times. pass@k, introduced for code generation by Chen et al. (2021), asks whether at least one of k attempts succeeds; τ-bench (Yao et al., 2024) introduced pass^k, which rewards succeeding on every attempt, a better fit for agents users rely on.",
+        "expert": "Report uncertainty: with 120 cases, a 3-point change may be noise, so use repeated runs or confidence intervals before acting. τ-bench reported state-of-the-art function-calling agents below 25% pass^8 in its retail domain, so expect reliability to lag single-run success. Track cost per successful task, not per attempt."
+      },
+      "walk": {
+        "why": "A few tracked numbers turn vague impressions (\"it feels worse\") into decisions.",
+        "wrong": "A single run on a small set can show a change that is just noise, or hide a real regression in one category.",
+        "example": "Teams commonly keep a dashboard comparing each release candidate's pass rate, cost and latency with the current production version."
+      }
     },
     {
       "from": "dash",
       "to": "agent",
       "label": "gate",
       "title": "Block regressions",
-      "text": "Run evals on every prompt or model change, like tests in CI. A 3-point drop means read the failing traces before shipping.",
+      "text": "Run evals on every prompt, tool or model change, like tests in CI. A drop blocks the release until someone looks.",
       "payload": [
         [
           "CI",
-          "fail if pass rate < 93%",
-          ""
+          "fail if pass rate < 93% or any safety check fails",
+          "Illustrative thresholds. Safety failures block regardless of averages."
+        ],
+        [
+          "triggers",
+          "prompt · tool schema · model version · retrieval changes",
+          "Anything that can change behaviour re-runs the suite."
+        ],
+        [
+          "action",
+          "read failing traces before shipping",
+          "Numbers point to problems; traces explain them."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Every time someone changes the agent's instructions, tools or underlying model, the exam runs automatically. If the score drops below the agreed line, or any safety check fails, the change is blocked until a person looks at what went wrong. It is the same idea as automatic tests for ordinary software.",
+        "practitioner": "Wire evals into CI with thresholds: a minimum pass rate, zero tolerance for safety failures, and limits on cost and latency. Re-run on every change that can alter behaviour, including model upgrades from your provider. When the gate fails, read the failing traces; they usually show the cause quickly.",
+        "expert": "Separate fast smoke evals for every commit from larger nightly suites. Pin model versions so behaviour does not change underneath you, and run the full suite before switching. Watch for eval set leakage into prompts, which inflates scores without real improvement."
+      },
+      "walk": {
+        "why": "Automatic gates catch regressions before customers do, especially after silent model or prompt changes.",
+        "wrong": "Gates that only check averages let a serious safety failure through if other cases improved.",
+        "example": "Many teams re-run their eval suite before adopting a new model version, comparing it case by case with the current one."
+      }
+    },
+    {
+      "from": "dash",
+      "to": "cases",
+      "label": "add failures",
+      "title": "Grow the set from real failures",
+      "text": "Failures found in production or review become new test cases, so the same mistake can't return unnoticed.",
+      "payload": [
+        [
+          "source",
+          "user reports · flagged traces · reviewer rejections",
+          "Where new cases come from."
+        ],
+        [
+          "new_case",
+          "\"Refund request in Urdu with no order number\"",
+          "Illustrative edge case the current set did not cover."
+        ],
+        [
+          "label",
+          "expected outcome agreed by a human",
+          "Each new case needs a clear, reviewed success condition."
+        ]
+      ],
+      "depth": {
+        "beginner": "When the agent makes a mistake with a real customer, that situation is added to the exam with the correct answer. Over time the exam grows to cover the tricky cases that actually happen, and a fix for one problem can never quietly break again later without someone noticing.",
+        "practitioner": "Close the loop: route production failures, low-confidence cases and human rejections into a review queue, label the expected outcome, and add them to the set. Keep the set balanced; if it fills with one kind of failure, rebalance or use tags to weight results.",
+        "expert": "Treat the eval set as a product. Review it periodically, retire cases that no longer reflect real use, and keep a small canary set of hard cases you check by hand. Anonymise data and respect retention rules when moving production examples into test data."
+      },
+      "walk": {
+        "why": "Real failures are the most valuable test cases because they reflect what users actually do.",
+        "wrong": "Without this loop, the same failure is fixed, forgotten and reintroduced by a later change.",
+        "example": "Software teams add a regression test for every fixed bug; agent teams do the same with eval cases."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Learn to measure whether your agent is getting better or worse, so you can change prompts, tools and models with confidence.",
+    "thirtySeconds": [
+      "Collect a fixed set of realistic tasks with clear success conditions, including edge cases and past failures.",
+      "Grade with code checks where possible and calibrated LLM judges for fuzzy qualities, running each case several times.",
+      "Track pass rate, reliability, cost and latency per version, block regressions in CI and feed new failures back into the set."
+    ],
+    "whyItMatters": "Agents change constantly: you edit prompts, add tools, and providers ship new models. Any change can quietly fix one thing and break another. Without evals, you find out from users. With them, you can compare versions on the same tasks, catch regressions before release, and make cost and model decisions with evidence instead of impressions.",
+    "analogy": "Evals are like a driving test route. Every candidate drives the same route with the same examiner checklist. Some items are exact (stopped at the red light), some need judgement (drove smoothly), and if a candidate keeps failing at one junction, that junction gets extra attention.",
+    "audience": "Developers and product teams shipping agents, ML engineers choosing models, and QA teams adapting testing to AI systems.",
+    "minutes": 17,
+    "prerequisites": [
+      "agent-loop",
+      "tool-use"
+    ],
+    "deepDives": [
+      {
+        "title": "Three ways to grade",
+        "body": "Code-based checks compare outputs or state against exact rules: fast, cheap and consistent. LLM judges score fuzzy qualities against a rubric: scalable but biased in known ways. Human review is the gold standard for nuance but slow and expensive.\n\nUse code wherever you can, judges for the rest, and humans to calibrate the judges and review high-stakes cases."
+      },
+      {
+        "title": "pass@k versus pass^k",
+        "body": "pass@k asks whether at least one of k attempts succeeds, which suits tasks where you can try several answers and keep the best, as in code generation (Chen et al., 2021).\n\npass^k asks whether all k attempts succeed. τ-bench (Yao et al., 2024) introduced it for agents, because a customer-facing agent must succeed every time, not once in a while. Expect pass^k to be noticeably lower than single-run pass rates."
+      },
+      {
+        "title": "Keeping LLM judges honest",
+        "body": "Research by Zheng et al. (2023) found strong LLM judges can match human agreement levels but show position, verbosity and self-enhancement biases.\n\nWrite specific rubrics, ask for reasoning before the score, randomise the order of compared answers, prefer a different model than the one being tested, and regularly compare judge scores with human labels."
+      },
+      {
+        "title": "Outcome versus trajectory",
+        "body": "You can grade an agent on its outcome (was the refund issued correctly?) or on its trajectory (did it look up the order before refunding, did it avoid forbidden tools, how many steps did it take?). Outcomes matter most to users; trajectories explain failures and catch unsafe paths that happened to end well.\n\nA practical mix is to gate releases on outcomes and safety checks, and track trajectory metrics such as steps and tool errors as diagnostics."
+      }
+    ],
+    "production": [
+      {
+        "title": "Overfitting to the eval set",
+        "body": "Tuning prompts until a small set passes can make scores rise while real quality does not. Keep a held-out set and grow the set from fresh production failures."
+      },
+      {
+        "title": "Noise mistaken for change",
+        "body": "Agents are not deterministic. Run cases several times and treat small differences on small sets with caution before celebrating or rolling back."
+      },
+      {
+        "title": "Silent model changes",
+        "body": "Provider model updates can shift behaviour. Pin model versions, and run the full suite before adopting a new one."
+      },
+      {
+        "title": "Grading the claim, not the outcome",
+        "body": "Agents can say a task is done when it is not. Check side effects in a sandbox, such as records created or tests passing, instead of trusting the final message."
+      },
+      {
+        "title": "Eval data leaking into prompts",
+        "body": "Copying eval cases into few-shot examples or system prompts makes scores rise without real improvement. Keep a held-out set that nobody uses while tuning, and check new prompts for overlap with eval cases."
+      },
+      {
+        "title": "Judge drift",
+        "body": "Changing the judge model or its prompt changes the metric itself. Version the judge, re-check it against human labels after any change, and avoid comparing scores produced by different judges."
+      }
+    ],
+    "lab": {
+      "title": "A small eval harness with a regression gate",
+      "intro": "Build a harness that runs an agent on tagged cases several times, grades each run with code checks and a pluggable judge, reports pass rate and pass^k per tag, and fails the gate on regressions or any safety failure. A scripted fake agent and judge make it run offline.",
+      "dir": "labs/evals"
+    },
+    "takeaways": [
+      "An eval is a fixed exam of realistic tasks with clear success conditions, including edge cases and past failures.",
+      "Grade with code checks wherever possible; use calibrated LLM judges only for fuzzy qualities.",
+      "Run cases several times: reliability (pass^k) matters as much as single-run success.",
+      "Gate every prompt, tool and model change in CI, and never let averages hide a safety failure.",
+      "Turn every real-world failure into a new eval case."
+    ],
+    "faq": [
+      {
+        "q": "How many test cases do I need?",
+        "a": "Start with a few dozen realistic cases and grow from real failures. Automated grading makes larger sets cheap; small sets make small score changes unreliable."
+      },
+      {
+        "q": "Can I use the same model as both agent and judge?",
+        "a": "You can, but research has found self-enhancement bias, and Anthropic suggests using a different model where possible. Either way, check the judge against human labels."
+      },
+      {
+        "q": "What is the difference between evals and unit tests?",
+        "a": "Unit tests check exact, deterministic behaviour. Evals measure a non-deterministic system across many tasks and report rates, so they tolerate some failures and look at trends."
+      },
+      {
+        "q": "Should evals run on every commit?",
+        "a": "Run a fast smoke set on every change that can affect behaviour and the full suite nightly or before releases and model upgrades."
+      },
+      {
+        "q": "Are public benchmarks enough?",
+        "a": "They help compare models in general, but they rarely match your tasks, tools and policies. Use them to shortlist models, then decide with your own eval set built from real traffic."
+      }
+    ],
+    "related": [
+      "agent-loop",
+      "multi-agent",
+      "observability",
+      "cost-latency"
+    ]
+  },
+  "quiz": [
+    {
+      "q": "Which quality is best checked with code rather than an LLM judge?",
+      "options": [
+        "Whether the reply sounds friendly",
+        "Whether the refund amount is at most the order total",
+        "Whether the explanation is clear",
+        "Whether the tone matches the brand"
+      ],
+      "answer": 1,
+      "explain": "Exact business rules are deterministic and cheap to check in code; judges are for fuzzy qualities."
+    },
+    {
+      "q": "What does pass^3 measure?",
+      "options": [
+        "Success on at least one of three runs",
+        "Success on all three runs of the same case",
+        "Three times the pass rate",
+        "Passing three different judges"
+      ],
+      "answer": 1,
+      "explain": "pass^k, introduced by τ-bench, rewards reliability: the case must succeed on every attempt."
+    },
+    {
+      "q": "Which is a known bias of LLM judges documented by Zheng et al. (2023)?",
+      "options": [
+        "Preferring shorter answers",
+        "Verbosity bias: favouring longer answers",
+        "Refusing to grade code",
+        "Always scoring zero"
+      ],
+      "answer": 1,
+      "explain": "The paper documents position, verbosity and self-enhancement biases."
+    },
+    {
+      "q": "The average pass rate improved, but one safety check failed. Should the release ship?",
+      "options": [
+        "Yes, the average is higher",
+        "No, safety failures should block regardless of averages",
+        "Only on weekends",
+        "Yes, if the judge agrees"
+      ],
+      "answer": 1,
+      "explain": "Averages can hide serious failures. Safety checks should be hard gates."
     }
   ]
 }

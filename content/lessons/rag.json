@@ -6,202 +6,293 @@
   "category": "Knowledge",
   "title": "RAG: retrieval-augmented generation",
   "summary": "Give a model your private documents by searching them first and pasting the best bits into the prompt.",
+  "seoTitle": "RAG explained: chunking, embeddings, vector search and grounded answers",
+  "seoDescription": "Step through retrieval-augmented generation: splitting documents, embeddings, vector and keyword search, reranking, and answers with citations.",
+  "objectives": [
+    "Describe the two halves of RAG: indexing documents ahead of time and retrieving passages at question time.",
+    "Explain embeddings, similarity search and why hybrid keyword plus vector search often retrieves better.",
+    "Diagnose bad answers as retrieval failures or generation failures, and measure each."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    { "title": "Lewis et al. (2020): Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks", "url": "https://arxiv.org/abs/2005.11401" },
+    { "title": "Anthropic: Introducing Contextual Retrieval", "url": "https://www.anthropic.com/engineering/contextual-retrieval" },
+    { "title": "OpenAI: File search tool", "url": "https://developers.openai.com/api/docs/guides/tools-file-search" },
+    { "title": "Google: Gemini API File Search", "url": "https://ai.google.dev/gemini-api/docs/file-search" }
+  ],
   "nodes": [
-    {
-      "id": "docs",
-      "label": "Your docs",
-      "kind": "data",
-      "x": 9,
-      "y": 20
-    },
-    {
-      "id": "embed",
-      "label": "Embedding model",
-      "kind": "model",
-      "x": 38,
-      "y": 20
-    },
-    {
-      "id": "vdb",
-      "label": "Vector database",
-      "kind": "data",
-      "x": 70,
-      "y": 20
-    },
-    {
-      "id": "user",
-      "label": "You",
-      "kind": "user",
-      "x": 9,
-      "y": 80
-    },
-    {
-      "id": "app",
-      "label": "Your app",
-      "kind": "app",
-      "x": 38,
-      "y": 80
-    },
-    {
-      "id": "model",
-      "label": "LLM",
-      "kind": "model",
-      "x": 70,
-      "y": 80
-    }
+    { "id": "docs", "label": "Your docs", "kind": "data", "x": 9, "y": 20 },
+    { "id": "embed", "label": "Embedding model", "kind": "model", "x": 38, "y": 20 },
+    { "id": "vdb", "label": "Vector database", "kind": "data", "x": 70, "y": 20 },
+    { "id": "user", "label": "You", "kind": "user", "x": 9, "y": 80 },
+    { "id": "app", "label": "Your app", "kind": "app", "x": 38, "y": 80 },
+    { "id": "model", "label": "LLM", "kind": "model", "x": 70, "y": 80 }
   ],
   "steps": [
     {
-      "from": "docs",
-      "to": "embed",
-      "label": "chunks",
+      "from": "docs", "to": "embed", "label": "chunks",
       "title": "Indexing: split documents into chunks",
       "text": "Done once, ahead of time. Long documents are cut into passages of a few hundred tokens, usually with some overlap so ideas aren't cut in half.",
       "payload": [
-        [
-          "source",
-          "hr-handbook.pdf (48 pages)",
-          ""
-        ],
-        [
-          "chunk_size",
-          "400 tokens · overlap 50",
-          "Too big = noisy matches, too small = lost context."
-        ],
-        [
-          "chunks",
-          "212",
-          ""
-        ]
-      ]
+        ["source", "hr-handbook.pdf (48 pages)", "The private document the model has never seen."],
+        ["chunk_size", "400 tokens · overlap 50", "Illustrative settings. Too big gives noisy matches; too small loses context."],
+        ["chunks", "212", "Number of passages produced from this file."],
+        ["context_prefix", "\"From the HR handbook, section 4: Leave policy.\"", "A short note added to each chunk so it makes sense on its own."]
+      ],
+      "depth": {
+        "beginner": "Before anyone asks a question, your documents are prepared. A long handbook is cut into short passages, a few paragraphs each, slightly overlapping so no idea is chopped in half. It is like cutting a book into index cards, each with a note at the top saying which chapter it came from, so a single card still makes sense on its own.",
+        "practitioner": "Indexing runs offline. Split documents by structure where possible (headings, sections, table rows) rather than fixed character counts, add light overlap, and keep metadata such as file, page and section. Adding a one-line context prefix to each chunk, an approach Anthropic calls contextual retrieval, helps chunks that would otherwise lose meaning, like \"revenue grew 3%\" without saying whose.",
+        "expert": "Chunking choices dominate retrieval quality and are cheap to change, so evaluate a few strategies on real questions. Preserve tables and code blocks intact. Re-index incrementally when documents change and delete stale chunks, or old policies will keep being retrieved. Store access-control labels with each chunk so retrieval can respect who may see what."
+      },
+      "walk": {
+        "why": "A model's context window is limited and expensive, so you search small passages rather than pasting whole libraries into every prompt.",
+        "wrong": "Chunks cut mid-table or mid-sentence, or stripped of their context, become unfindable or misleading.",
+        "example": "Internal help-desk bots usually index policy documents section by section so each answer can point to the exact section."
+      }
     },
     {
-      "from": "embed",
-      "to": "vdb",
-      "label": "vectors",
+      "from": "embed", "to": "vdb", "label": "vectors",
       "title": "Each chunk becomes a vector",
       "text": "An embedding is a list of numbers that captures meaning. Passages about similar things end up close together, even with different words.",
       "payload": [
-        [
-          "vector",
-          "[0.012, -0.341, 0.088, … ]",
-          ""
-        ],
-        [
-          "dimensions",
-          "1024",
-          ""
-        ],
-        [
-          "metadata",
-          "{ file: \"hr-handbook.pdf\", page: 14 }",
-          "Kept so you can cite sources later."
-        ]
-      ]
+        ["vector", "[0.012, -0.341, 0.088, …]", "Illustrative values. The numbers have no meaning on their own; only distances between vectors do."],
+        ["dimensions", "1024", "Illustrative. Depends on the embedding model you choose."],
+        ["metadata", "{ file: \"hr-handbook.pdf\", page: 14, section: \"Leave\" }", "Kept alongside the vector so answers can cite sources and filters can apply."],
+        ["keyword index", "BM25 terms for the same chunk", "A classic word-matching index stored too, for hybrid search."]
+      ],
+      "depth": {
+        "beginner": "Each passage is turned into a long list of numbers by an embedding model. Think of it as a location on a huge map of meaning: passages about holidays end up near each other, far from passages about expense claims, even if they use different words. These locations are stored in a special database that is good at finding nearby points.",
+        "practitioner": "An embedding model maps text to a fixed-length vector so that semantic similarity becomes geometric closeness. A vector database stores vectors with metadata and supports fast nearest-neighbour search. Many systems also build a keyword index (such as BM25) on the same chunks, because exact terms like error codes or product names are matched better by words than by meaning.",
+        "expert": "Changing the embedding model means re-embedding everything, since vectors from different models are not comparable. Approximate nearest-neighbour indexes trade a little recall for speed; check recall on your own data. Normalise vectors if your similarity metric expects it, and version the index alongside the model name."
+      },
+      "walk": {
+        "why": "Searching by meaning finds the right passage even when the question uses different words from the document.",
+        "wrong": "Pure vector search can miss exact identifiers, part numbers or names that keyword search would catch.",
+        "example": "A support bot finds the \"refund window\" section when a customer asks \"how long do I have to send it back?\"."
+      }
     },
     {
-      "from": "user",
-      "to": "app",
-      "label": "question",
+      "from": "user", "to": "app", "label": "question",
       "title": "Query time: a question arrives",
-      "text": "",
+      "text": "Now the live part begins.",
       "payload": [
-        [
-          "text",
-          "\"How many days of parental leave do I get?\"",
-          ""
-        ]
-      ]
+        ["text", "\"How many days of parental leave do I get?\"", "The user's question in their own words."],
+        ["user", "employee, Pakistan office", "Who is asking matters: answers and access rights can depend on it."]
+      ],
+      "depth": {
+        "beginner": "Weeks later, an employee asks: \"How many days of parental leave do I get?\". The AI was never trained on your handbook, so it cannot know the answer from memory. Instead of guessing, the app will look the answer up in the prepared index cards first, then let the AI write the reply.",
+        "practitioner": "At query time the app decides whether retrieval is needed at all, then may rewrite the question into a better search query, for example expanding abbreviations or adding the user's country. Who the user is matters: retrieval should only search documents they are allowed to read.",
+        "expert": "Query rewriting, multi-query expansion and filtering by metadata (country, department, effective date) often improve results more than changing models. In agentic RAG, the model itself decides when and what to search by calling a search tool, possibly several times."
+      },
+      "walk": {
+        "why": "Looking things up at question time keeps answers current without retraining the model.",
+        "wrong": "Searching documents the user may not see can leak confidential information into an answer.",
+        "example": "A company bot answers leave questions differently for staff in different countries by filtering on the office metadata."
+      }
     },
     {
-      "from": "app",
-      "to": "embed",
-      "label": "embed query",
+      "from": "app", "to": "embed", "label": "embed query",
       "title": "Embed the question with the same model",
       "text": "Question and documents must live in the same vector space, so the same embedding model is used.",
       "payload": [
-        [
-          "query_vector",
-          "[0.020, -0.297, 0.101, …]",
-          ""
-        ]
-      ]
+        ["query", "\"parental leave days\"", "Possibly rewritten from the original question for better search."],
+        ["query_vector", "[0.020, -0.297, 0.101, …]", "Illustrative. Must come from the same model that embedded the chunks."]
+      ],
+      "depth": {
+        "beginner": "The question itself is turned into a location on the same map of meaning, using the same embedding model as before. Now the question and every passage live on one map, so the app can simply look for the passages sitting closest to the question.",
+        "practitioner": "Use the identical embedding model and settings used at indexing time; vectors from different models cannot be compared. Some embedding models expect a different prefix or mode for queries versus documents; follow the model's documentation exactly.",
+        "expert": "Cache query embeddings for frequent questions. For short or ambiguous questions, techniques such as generating a hypothetical answer and embedding that can improve recall; measure before adopting. Keep embedding latency in your budget, since it sits on the critical path."
+      },
+      "walk": {
+        "why": "Comparing the question and passages in one shared space is what makes semantic search work.",
+        "wrong": "Upgrading the embedding model for queries but not re-indexing documents silently breaks retrieval.",
+        "example": "A team that switched embedding providers saw search quality collapse until they re-embedded the whole document set."
+      }
     },
     {
-      "from": "embed",
-      "to": "vdb",
-      "label": "nearest neighbours",
+      "from": "embed", "to": "vdb", "label": "search",
       "title": "Search for the closest chunks",
-      "text": "The database finds the vectors nearest the question (cosine similarity). Many systems also run a keyword search and merge the two (hybrid search).",
+      "text": "The database finds the vectors nearest the question. Many systems also run a keyword search and merge the two (hybrid search).",
       "payload": [
-        [
-          "top_k",
-          "4",
-          ""
-        ],
-        [
-          "metric",
-          "cosine",
-          ""
-        ]
-      ]
+        ["top_k", "20 candidates", "Retrieve generously first, then narrow down."],
+        ["metric", "cosine similarity", "Compares the direction of two vectors: 1 means same direction."],
+        ["filter", "{ office: \"PK\", status: \"current\" }", "Metadata filters keep results relevant and authorised."],
+        ["hybrid", "vector results + BM25 results, merged", "Catches both meaning matches and exact-term matches."]
+      ],
+      "depth": {
+        "beginner": "The database finds the passages closest to the question on the map. Many systems also do an old-fashioned word search at the same time and combine both lists, because word search is better at exact names and numbers. It returns a short list of candidate passages, the best guesses for where the answer lives.",
+        "practitioner": "Fetch more candidates than you will finally use (say 20) using vector search, keyword search or both, then merge them. Apply metadata filters for permissions, region and document status. Anthropic's published contextual retrieval experiment reported fewer retrieval failures when combining contextual embeddings with contextual BM25, and fewer still after adding a reranking step.",
+        "expert": "Evaluate retrieval separately from generation: for a set of real questions, check whether the right chunk appears in the top results (recall@k). Hybrid merging methods such as reciprocal rank fusion are simple and robust. Watch for filters that are too strict, which quietly return nothing relevant."
+      },
+      "walk": {
+        "why": "Combining meaning-based and word-based search covers each method's blind spots.",
+        "wrong": "If the right passage is not retrieved, no model can answer correctly; it will guess or say it does not know.",
+        "example": "Searching for an error code like \"E-4012\" works far better with keyword search than with embeddings alone."
+      }
     },
     {
-      "from": "vdb",
-      "to": "app",
-      "label": "top 4 chunks",
+      "from": "vdb", "to": "app", "label": "top chunks",
       "title": "Best passages come back",
-      "text": "",
+      "text": "After reranking, the best few passages are kept.",
       "payload": [
-        [
-          "#1",
-          "p.14 \"Parental leave: 16 weeks paid…\" · 0.89",
-          "Score = similarity."
-        ],
-        [
-          "#2",
-          "p.15 \"Leave can be split into…\" · 0.81",
-          ""
-        ],
-        [
-          "#3",
-          "p.3 \"Annual leave: 20 days…\" · 0.62",
-          "Related but not what was asked."
-        ]
-      ]
+        ["#1", "p.14 \"Parental leave: 16 weeks paid…\" · 0.89", "Illustrative score; higher means more relevant."],
+        ["#2", "p.15 \"Leave can be split into two blocks…\" · 0.81", "A related passage that adds detail."],
+        ["#3", "p.3 \"Annual leave: 20 days…\" · 0.62", "Related but not what was asked."],
+        ["reranker", "20 candidates → top 3", "A second model re-scores candidates more carefully than the first search."]
+      ],
+      "depth": {
+        "beginner": "The best passages come back with scores. The top one says parental leave is 16 weeks paid; the second explains it can be split; the third is about annual leave, close in meaning but not what was asked. Good systems double-check the list with a more careful second pass before using it.",
+        "practitioner": "A reranker reads each question-passage pair and re-scores relevance more accurately than raw similarity, at higher cost per item, which is why it runs only on the shortlist. Keep the final set small and relevant; extra loosely related chunks can distract the model and raise cost.",
+        "expert": "Set a minimum relevance threshold so irrelevant passages are dropped instead of padded in; if nothing clears it, say so rather than answer from weak context. Log retrieved chunk IDs and scores per answer; they are essential for debugging and for citation checks."
+      },
+      "walk": {
+        "why": "A small set of highly relevant passages gives the model exactly what it needs and nothing that distracts it.",
+        "wrong": "Passing near-misses like the annual-leave passage can lead the model to blend two different policies into one wrong answer.",
+        "example": "Legal research tools typically rerank dozens of candidate passages before showing a lawyer the few most relevant ones."
+      },
+      "predict": {
+        "question": "Why did the annual-leave passage come back for a parental-leave question?",
+        "reveal": "Similarity search finds passages that are close in meaning, and both are about leave. It does not understand which one actually answers the question; that is why reranking and relevance thresholds matter."
+      }
     },
     {
-      "from": "app",
-      "to": "model",
-      "label": "prompt + context",
-      "title": "Stuff the context into the prompt",
+      "from": "app", "to": "model", "label": "prompt + context",
+      "title": "Put the passages in the prompt",
       "text": "The retrieved text is pasted in with an instruction to answer only from it. The model hasn't been retrained; it's reading.",
       "payload": [
-        [
-          "system",
-          "\"Answer only from <context>. Cite pages. Say if unsure.\"",
-          "Reduces made-up answers."
-        ],
-        [
-          "context",
-          "<context>p.14 … p.15 … p.3 …</context>",
-          ""
-        ]
-      ]
+        ["system", "\"Answer only from <context>. Cite page numbers. If the answer isn't there, say so.\"", "Grounding instructions reduce made-up answers."],
+        ["context", "<context>[p.14] … [p.15] …</context>", "Passages with source labels the model can cite."],
+        ["question", "\"How many days of parental leave do I get?\"", "The original question, after the context."]
+      ],
+      "depth": {
+        "beginner": "The app gives the AI the question plus the selected passages, with an instruction: answer only from these passages, say which page you used, and admit it if the answer is not there. The AI is not learning anything permanently. It is reading the cards you handed it, like an open-book exam.",
+        "practitioner": "Format each passage with a source label so the model can cite it. Put stable instructions first and retrieved context later. Tell the model what to do when the context is insufficient. Several provider APIs also offer document inputs with built-in citations, which return exact quoted spans you can verify.",
+        "expert": "Treat retrieved documents as untrusted input: a planted sentence in a wiki page is an indirect prompt-injection vector. Keep tools with side effects away from RAG answering where possible. Long contexts let you include more passages, but quality can drop when relevant text is buried; retrieval precision still matters."
+      },
+      "walk": {
+        "why": "Putting the source text in front of the model lets it answer from facts it has never been trained on.",
+        "wrong": "Without an \"if it's not there, say so\" rule, models often fill gaps with plausible but invented details.",
+        "example": "Customer-service bots that quote the policy section they relied on let staff check answers in seconds."
+      },
+      "providers": {
+        "anthropic": "You can pass passages as text or as document content blocks; enabling citations on documents returns cited spans with the answer.",
+        "openai": "Responses API offers a hosted `file_search` tool that searches vector stores you attach with `vector_store_ids`.",
+        "gemini": "Gemini API offers a hosted File Search tool that searches file search stores attached via `file_search_store_names`."
+      }
     },
     {
-      "from": "model",
-      "to": "app",
-      "label": "grounded answer",
+      "from": "model", "to": "app", "label": "grounded answer",
       "title": "An answer with citations",
       "text": "Answers can now cite the handbook. If retrieval misses the right chunk, the answer will be wrong, so RAG quality mostly depends on search quality.",
       "payload": [
-        [
-          "text",
-          "\"16 weeks paid, which can be split into two blocks (p.14–15).\"",
-          ""
-        ]
-      ]
+        ["text", "\"16 weeks paid, which can be split into two blocks (p.14–15).\"", "Grounded in the retrieved passages, with page references."],
+        ["citations", "[p.14, p.15]", "Lets users and automated checks verify every claim."],
+        ["check", "cited pages ⊆ retrieved pages", "A simple automatic test that the model only cited what it was given."]
+      ],
+      "depth": {
+        "beginner": "The answer says 16 weeks paid, splittable into two blocks, and points to pages 14 and 15. Anyone can open the handbook and check. If the search had fetched the wrong pages, the answer would have been wrong too, which is why most effort in RAG goes into finding the right passages, not into the AI writing the answer.",
+        "practitioner": "Check that every citation refers to a passage that was actually retrieved, and show citations to users. When answers are wrong, first ask whether the right passage was retrieved: if not, fix chunking, search or filters; if yes, fix the prompt or model. Keep a test set of real questions with expected sources.",
+        "expert": "Measure retrieval (recall@k, precision) and generation (faithfulness to context, answer correctness) separately. Track \"I don't know\" rates: too low may mean hallucination, too high may mean retrieval gaps. Re-run the evaluation whenever documents, chunking or models change."
+      },
+      "walk": {
+        "why": "Citations turn a confident paragraph into something verifiable.",
+        "wrong": "Models can cite a real page but misstate what it says; spot-check that cited text supports the claim.",
+        "example": "Some enterprise search assistants highlight the exact sentence they used, so employees can verify answers instantly."
+      },
+      "predict": {
+        "question": "An answer is wrong. What is the first thing to check?",
+        "reveal": "Whether the right passage was retrieved at all. Most RAG failures are retrieval failures; if the right text never reached the model, changing the model will not help."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Learn how AI assistants answer questions about documents they were never trained on: by searching first, then reading what they found.",
+    "thirtySeconds": [
+      "Documents are split into passages, turned into embeddings, and stored in a searchable index ahead of time.",
+      "At question time the app retrieves the most relevant passages and puts them in the prompt with an instruction to answer only from them.",
+      "Answer quality depends mostly on retrieval quality, so measure whether the right passage was found before blaming the model."
+    ],
+    "whyItMatters": "Most valuable business knowledge lives in private documents: policies, runbooks, contracts and tickets. RAG is the most common way to let AI use that knowledge without retraining a model, and it powers internal help desks, support bots and security assistants that consult playbooks. Knowing how it works tells you where answers go wrong and how to fix them, which is usually in search, not in the model.",
+    "analogy": "An open-book exam. The student (the model) is fluent and quick but has not read your handbook. A librarian (retrieval) fetches the few most relevant pages; the student answers from them and quotes page numbers. A bad librarian means a bad answer, however clever the student.",
+    "audience": "Developers building assistants over company documents, product owners specifying knowledge bots, and security teams who want AI to consult internal playbooks.",
+    "minutes": 16,
+    "prerequisites": ["llm-call"],
+    "deepDives": [
+      {
+        "title": "Embeddings in plain terms",
+        "body": "An embedding model converts text into a list of numbers so that texts with similar meaning have similar numbers. Distance between two lists, often measured with cosine similarity, stands in for difference in meaning.\n\nEmbeddings let search find \"how long do I have to return it?\" when the document says \"refund window: 30 days\". They are weaker on exact identifiers, which is why keyword search remains useful."
+      },
+      {
+        "title": "Hybrid search and reranking",
+        "body": "Hybrid search runs vector search and keyword search together and merges the results, covering each method's blind spots. A reranker then reads each candidate passage alongside the question and re-scores it more precisely.\n\nAnthropic's published contextual retrieval experiment reported that adding chunk context, BM25 and reranking each reduced retrieval failures in its benchmarks; test on your own data before assuming the same gains."
+      },
+      {
+        "title": "RAG versus long context versus fine-tuning",
+        "body": "If your material is small, you can paste it all into a long context window and skip retrieval. RAG wins when material is large, changes often, or needs per-user access control.\n\nFine-tuning changes a model's behaviour or style, not its ability to recall fresh facts reliably; for knowledge that changes, retrieval is usually the better tool."
+      }
+    ],
+    "production": [
+      {
+        "title": "Permission leaks",
+        "body": "If retrieval ignores access rights, the assistant can quote documents the user should never see. Store permissions with each chunk and filter at query time."
+      },
+      {
+        "title": "Stale and duplicate content",
+        "body": "Old policy versions keep being retrieved unless you delete or down-rank them. Re-index on change, record effective dates, and prefer current documents."
+      },
+      {
+        "title": "Injection through documents",
+        "body": "Anyone who can edit an indexed wiki page or upload a file can plant instructions. Treat retrieved text as untrusted and keep side-effecting tools away from answering."
+      },
+      {
+        "title": "Unmeasured quality",
+        "body": "Without a test set of real questions and expected sources, changes to chunking or models silently make answers worse. Measure retrieval and answer quality separately."
+      }
+    ],
+    "lab": {
+      "title": "Retrieve, then check the citations",
+      "intro": "Build a tiny retriever with only the standard library: chunk a handbook, score passages against a question, apply a relevance threshold, and verify that an answer cites only passages that were actually retrieved. It uses simple word-count vectors instead of a real embedding model, so it runs offline; the pipeline shape is the same.",
+      "dir": "labs/rag"
+    },
+    "takeaways": [
+      "RAG has two halves: index documents ahead of time, retrieve relevant passages at question time.",
+      "Embeddings find passages by meaning; keyword search catches exact terms; hybrid search uses both.",
+      "Give the model only relevant passages, with sources, and tell it to admit when the answer is missing.",
+      "Most wrong answers are retrieval failures, so measure retrieval separately.",
+      "Respect permissions in retrieval and treat retrieved text as untrusted input."
+    ],
+    "faq": [
+      { "q": "Does RAG retrain the model on my documents?", "a": "No. The model reads retrieved passages at question time, like an open-book exam. Nothing is learned permanently, which is why updates to documents show up immediately after re-indexing." },
+      { "q": "Do I need a vector database?", "a": "For small collections, a simple in-memory index or even keyword search can be enough. Dedicated vector databases help at larger scale and with filtering. Several model providers also offer hosted file search tools." },
+      { "q": "Why does my RAG bot give confident wrong answers?", "a": "Usually because the right passage was not retrieved, or because irrelevant passages were included. Check retrieval first, then add a rule to say \"I don't know\" when the context is insufficient." },
+      { "q": "How big should chunks be?", "a": "There is no universal answer. A few hundred tokens with small overlap is a common starting point; split by document structure where possible and test a few sizes on real questions." }
+    ],
+    "related": ["llm-call", "memory", "context-caching", "evals"]
+  },
+  "quiz": [
+    {
+      "q": "What does an embedding represent?",
+      "options": ["A compressed copy of the document", "A list of numbers capturing meaning, used for similarity", "The model's training data", "An encryption key"],
+      "answer": 1,
+      "explain": "Embeddings map text to vectors so that similar meanings are close together, which enables semantic search."
+    },
+    {
+      "q": "Why combine keyword search with vector search?",
+      "options": ["It is cheaper than vector search", "Keyword search catches exact terms like codes and names that embeddings can miss", "Vector databases require it", "It removes the need for chunking"],
+      "answer": 1,
+      "explain": "Hybrid search covers both meaning-based matches and exact-term matches."
+    },
+    {
+      "q": "A RAG answer is wrong. The correct passage was not in the retrieved set. What should you fix first?",
+      "options": ["Switch to a larger LLM", "Chunking, search or filters", "The system prompt's tone", "The temperature setting"],
+      "answer": 1,
+      "explain": "If the right text never reached the model, the problem is retrieval. A better model cannot answer from text it never saw."
+    },
+    {
+      "q": "Why store permissions with each chunk?",
+      "options": ["To speed up embedding", "So retrieval only returns passages the user is allowed to see", "To reduce token cost", "Because vector databases require it"],
+      "answer": 1,
+      "explain": "Without permission filtering, an assistant can quote confidential documents to anyone who asks."
     }
   ]
 }

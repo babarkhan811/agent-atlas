@@ -1,0 +1,308 @@
+{
+  "id": "cost-latency",
+  "path": "reliable-agents",
+  "order": 8,
+  "tier": "pro",
+  "category": "Production",
+  "title": "Cost and latency budgeting",
+  "summary": "Work out what an agent task really costs and how long it takes, set budgets, and pull the levers that bring both down.",
+  "seoTitle": "Cost and latency budgeting for LLM apps and AI agents",
+  "seoDescription": "Calculate LLM cost per task from input, cached and output tokens, separate time-to-first-token from total latency, enforce budgets, and use caching, routing and batching.",
+  "objectives": [
+    "Calculate the cost of a request and of a whole task from input, cache and output token counts.",
+    "Separate time-to-first-token from total latency and match each to the right fix.",
+    "Enforce per-task and per-user budgets, and choose between levers such as caching, routing, effort and batching."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    { "title": "Anthropic: Pricing", "url": "https://platform.claude.com/docs/en/about-claude/pricing" },
+    { "title": "Anthropic: Prompt caching (cache write and read multipliers)", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" },
+    { "title": "Anthropic: Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" },
+    { "title": "Anthropic: Task budgets", "url": "https://platform.claude.com/docs/en/build-with-claude/task-budgets" },
+    { "title": "Anthropic: Token counting", "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting" },
+    { "title": "OpenAI: Batch API", "url": "https://developers.openai.com/api/docs/guides/batch" },
+    { "title": "OpenAI: Latency optimization", "url": "https://developers.openai.com/api/docs/guides/latency-optimization" }
+  ],
+  "nodes": [
+    { "id": "user", "label": "Analyst", "kind": "user", "x": 9, "y": 50 },
+    { "id": "app", "label": "Your app", "kind": "app", "x": 34, "y": 50 },
+    { "id": "guard", "label": "Budget guard", "kind": "guard", "x": 34, "y": 12 },
+    { "id": "large", "label": "Large model", "kind": "model", "x": 66, "y": 14 },
+    { "id": "small", "label": "Small model", "kind": "model", "x": 66, "y": 86 },
+    { "id": "meter", "label": "Usage meter", "kind": "data", "x": 91, "y": 50 }
+  ],
+  "steps": [
+    {
+      "from": "user", "to": "app", "label": "task",
+      "title": "A task arrives with a cost and time budget",
+      "text": "The analyst asks for a summary of three incident reports. The product has a budget per task and a target for how fast the first words appear.",
+      "payload": [
+        ["task", "\"Summarise these 3 incident reports\"", "One user request may need several model calls."],
+        ["budget.per_task", "$0.05 (illustrative)", "The most this kind of task may cost. Set from what the feature is worth."],
+        ["budget.per_user_day", "$1.00 (illustrative)", "Protects against one user, or a runaway loop, burning the budget."],
+        ["latency target", "first words within 2 s", "Users notice waiting for the start more than the end."]
+      ],
+      "depth": {
+        "beginner": "An analyst asks the AI to summarise three incident reports. Before anything happens, the product already has two limits in mind: how much this kind of task is allowed to cost, and how quickly the first words should appear on screen. Setting these limits up front is like giving a taxi driver a fare limit and a pickup time before the journey starts.",
+        "practitioner": "Budgets turn vague worries about AI bills into rules your code can enforce. Set them per task type, per user per day and per organisation, based on what the feature is worth and how users experience delay. Latency targets work best split in two: time to first token, which users feel as waiting, and total time to finish.",
+        "expert": "Define budgets in currency for business owners but enforce them in tokens, since tokens are what the APIs report. Keep separate budgets for interactive and background traffic: they have different latency needs and can use different pricing tiers. Revisit budgets when models or prices change."
+      },
+      "walk": {
+        "why": "Agent tasks can take one model call or twenty. Without a budget, cost per task is whatever the model happens to do.",
+        "wrong": "Discovering costs from the monthly invoice, after a looping agent or a heavy user has already spent the money.",
+        "example": "Products with AI features commonly cap daily usage per user, which limits both abuse and runaway automation."
+      }
+    },
+    {
+      "from": "app", "to": "guard", "label": "check budget",
+      "title": "Estimate before you spend",
+      "text": "The app counts input tokens and checks the user's remaining daily budget before calling the large model.",
+      "payload": [
+        ["estimated input", "≈ 12,000 tokens", "From a token-counting endpoint, which returns a count without running the model."],
+        ["estimated cost", "≈ $0.02–0.03", "Input estimate plus an allowance for output; illustrative rates."],
+        ["user remaining today", "$0.62", "Fetched from the usage meter."],
+        ["decision", "allow", "Enough budget for this task with margin."]
+      ],
+      "depth": {
+        "beginner": "Before calling the expensive model, the app does a quick estimate: roughly how much text will be sent, and roughly what that will cost. It also checks how much of today's allowance this person has left. If the task would go over, the app can warn, trim the input or refuse, instead of finding out afterwards.",
+        "practitioner": "Use the provider's token-counting endpoint or library to count input tokens before sending, then estimate cost with your price table and a reasonable output allowance. Compare against the remaining per-user and per-task budgets. Pre-checks are cheap and stop the most expensive surprises, such as someone pasting a huge document.",
+        "expert": "Estimates are imperfect: output length and reasoning depth vary. Reserve budget before the call and settle it with real usage afterwards. Keep price tables in configuration with an effective date, and alert when providers change prices so estimates do not silently drift."
+      },
+      "walk": {
+        "why": "Input size is known before the call; checking it first prevents the largest overruns at almost no cost.",
+        "wrong": "Estimating tokens from characters gives wrong numbers for code, tables and non-English text, so budgets are breached anyway.",
+        "example": "A document-summary tool warns users before processing a 300-page PDF and offers to summarise selected chapters instead."
+      }
+    },
+    {
+      "from": "app", "to": "small", "label": "route: classify",
+      "title": "Use a small model where it is good enough",
+      "text": "A quick, cheap model decides how complex the task is and extracts the key facts from each report.",
+      "payload": [
+        ["model", "small, fast tier", "Much lower price per token and lower latency than the large tier."],
+        ["usage", "600 in · 20 out", "A tiny call."],
+        ["cost", "≈ $0.0002 (illustrative)", "At an illustrative $0.25 per million input and $1.25 per million output tokens."],
+        ["result", "\"complexity: medium\"", "Used to choose effort and model for the main step."]
+      ],
+      "depth": {
+        "beginner": "Not every job needs the most expensive expert. A small, fast model handles the simple part first, such as judging how complicated the reports are. It costs a tiny fraction of the big model and answers almost instantly. The big model is saved for the part that really needs it.",
+        "practitioner": "Routing sends simple steps to a cheaper, faster model and hard steps to a stronger one. Measure the small model on real examples before trusting it; a cheap model that fails costs its tokens, then the retry, then whatever the mistake causes. Judge by cost per completed task, not cost per call.",
+        "expert": "Before building a multi-model cascade, test a single strong model at lower effort; it can match the cascade's quality with simpler code, and one model shares one prompt cache, whereas caches are not shared across models. Add routing only where measurements show it saves money at equal quality."
+      },
+      "walk": {
+        "why": "Price per token can differ many times over between model tiers, and small models are often good at narrow tasks.",
+        "wrong": "Routing hard tasks to a weak model to save money, then paying more in retries, escalations and wrong answers.",
+        "example": "Many support systems use a small model to classify incoming messages and a larger one only to draft replies to complex cases."
+      }
+    },
+    {
+      "from": "app", "to": "large", "label": "main call (cached, streamed)",
+      "title": "The main call uses caching, effort and streaming",
+      "text": "The large model writes the summary. The stable prefix is read from cache, effort is matched to the task, and the reply streams.",
+      "payload": [
+        ["cached prefix", "10,000 tokens (instructions + report template)", "Read from cache at about a tenth of the input price on Anthropic's API."],
+        ["new input", "2,000 tokens", "The three reports' extracted facts and the request."],
+        ["effort", "\"medium\"", "Chosen from the complexity result; lower effort means fewer reasoning tokens."],
+        ["max_tokens", "1,500", "A hard ceiling on output for this call."],
+        ["stream", "true", "First words appear quickly even if the full summary takes longer."]
+      ],
+      "predict": {
+        "question": "Which setting most improves how fast the analyst sees the first words: streaming, a lower max_tokens, or a bigger budget?",
+        "reveal": "Streaming. It shows text as soon as generation starts. Caching a long prefix also helps by cutting prompt processing. A lower max_tokens limits cost and total time but does not make the first word arrive sooner."
+      },
+      "depth": {
+        "beginner": "Now the big model does the main work, with three savings switched on. The long, unchanging instructions are reused from a cache instead of being paid for in full. The model is told to think a moderate amount, not the maximum. And the answer is streamed, so the analyst starts reading within a second or two while the rest is still being written.",
+        "practitioner": "Stack the free wins first: cache stable prefixes, keep inputs lean, cap output with `max_tokens`, and stream. Then tune trade-offs such as effort or model choice against an evaluation. Time-to-first-token mostly depends on prompt processing (helped by caching and shorter prompts); total time mostly depends on output length and speed.",
+        "expert": "Effort and reasoning settings shift output tokens, which usually cost several times more than input tokens. On Anthropic's API a beta task budget lets the model see a token budget for a whole agentic loop and pace itself, while `max_tokens` remains the enforced per-response cap the model cannot see."
+      },
+      "walk": {
+        "why": "Caching, lean inputs, output caps and streaming reduce cost or waiting without lowering quality, so they come before any trade-off.",
+        "wrong": "Cutting `max_tokens` so low that answers are truncated, which forces retries and costs more overall.",
+        "example": "A reporting tool keeps its 10,000-token instructions cached and only sends the new data, so each report pays mostly for output."
+      }
+    },
+    {
+      "from": "large", "to": "app", "label": "stream + usage",
+      "title": "Usage arrives: compute the real cost",
+      "text": "The final events report token usage, which the app turns into money using its price table.",
+      "payload": [
+        ["input_tokens", "2,000 → $0.0060", "Uncached input at an illustrative $3.00 per million tokens."],
+        ["cache_read_input_tokens", "10,000 → $0.0030", "At 0.1× the input rate (Anthropic's multiplier for cache reads on most models)."],
+        ["output_tokens", "800 → $0.0120", "Includes any reasoning tokens, at an illustrative $15.00 per million."],
+        ["call cost", "$0.0210", "Within the task budget; the cached prefix saved about $0.027 versus sending it uncached."],
+        ["time", "first token 1.1 s · total 9.4 s", "Illustrative: total time is dominated by writing 800 tokens."]
+      ],
+      "depth": {
+        "beginner": "When the answer finishes, the service reports exactly how many tokens were used. The app multiplies each kind by its price: new input, cheap cached input, and output, which costs the most. Here the call cost about two cents. Without the cache, the same call would have cost noticeably more, because the long instructions would have been paid for in full.",
+        "practitioner": "Cost per call = uncached input × input rate + cache writes × write rate + cache reads × read rate + output × output rate. On Anthropic's API, 5-minute cache writes cost 1.25× the input rate, 1-hour writes 2×, and reads about 0.1× (lower on some newer models). Output, including reasoning, is usually the most expensive part.",
+        "expert": "Compute cost from the usage object of every response, not from estimates, and store it with the request ID. Prices differ by model, by tier (batch, priority) and sometimes by prompt length, so keep a versioned price table. Reconcile your computed totals against provider usage reports monthly."
+      },
+      "walk": {
+        "why": "Token counts are exact and arrive with every response, so per-call cost can be computed precisely and in real time.",
+        "wrong": "Ignoring cache and reasoning fields gives cost numbers that are too low or too high, depending on the provider's reporting.",
+        "example": "A finance team reconciles an app's per-request cost logs with the provider's monthly invoice to within a few percent."
+      }
+    },
+    {
+      "from": "app", "to": "meter", "label": "record cost",
+      "title": "Record cost per task, not just per call",
+      "text": "The meter adds this call to the task's running total and to the user's daily total.",
+      "payload": [
+        ["task_id", "t_8821", "Groups every call belonging to this task."],
+        ["task total so far", "$0.0212 (2 calls)", "Small-model call plus large-model call."],
+        ["user today", "$0.40 of $1.00", "Updated in real time."],
+        ["completed", "pending", "Cost per completed task needs the outcome too."]
+      ],
+      "depth": {
+        "beginner": "Every call is written down against this task and against the person's daily allowance. What matters is not the price of one call, but the total price of getting the job done. If a cheaper approach fails and has to be redone, it can end up costing more than a pricier one that works first time.",
+        "practitioner": "Aggregate usage by task, user, feature and model. The key metric is cost per completed task: total spend divided by tasks that actually succeeded. It captures retries, failures and loops that per-call metrics hide, and it is the right number for comparing models, prompts and effort settings.",
+        "expert": "Attach cost to traces (see the observability lesson) so outliers can be inspected. Watch distributions, not just averages: a small share of tasks often drives a large share of cost. Alert on spend per hour per feature to catch runaway loops quickly."
+      },
+      "walk": {
+        "why": "Businesses pay for outcomes. Cost per completed task connects the AI bill to the value delivered.",
+        "wrong": "Optimising price per token while a cheaper model needs three attempts per task, tripling the real cost.",
+        "example": "A team compares two models: the cheaper one per token turns out more expensive per resolved ticket because of retries."
+      }
+    },
+    {
+      "from": "guard", "to": "app", "label": "budget reached",
+      "title": "A loop hits the task budget and stops gracefully",
+      "text": "The agent wants another round of research. The projected cost would exceed the task budget, so the app stops and returns what it has.",
+      "payload": [
+        ["requested", "another tool round + model call", "The agent wanted to keep going."],
+        ["projected task total", "$0.058 > $0.05", "Would break the per-task budget."],
+        ["action", "finish with current findings", "Return a useful partial answer, clearly labelled, instead of an error."],
+        ["log", "budget_stop · task t_8821", "Frequent budget stops on one task type mean the budget or the design needs review."]
+      ],
+      "predict": {
+        "question": "An agent has used most of its budget and wants one more expensive step. What is the best default behaviour?",
+        "reveal": "Stop and return the best answer so far, clearly marked as partial, with an option to continue. Silently continuing breaks the budget; failing with an error wastes the work already paid for."
+      },
+      "depth": {
+        "beginner": "The agent wants to do one more round of research, but that would push the task over its spending limit. Instead of continuing or crashing, the app stops politely and hands over what it has found so far, clearly marked as incomplete, with an option to continue. The limit is respected and the work already done is not wasted.",
+        "practitioner": "Enforce budgets in the loop: before each model or tool call, compare projected spend with the remaining budget. When exceeded, end gracefully: summarise findings, say what is missing, and offer a paid or approved continuation. Log every budget stop with the task type so budgets can be tuned.",
+        "expert": "Combine hard and soft limits: hard caps in your code (rounds, tokens, currency, wall-clock time) and, where available, a budget the model can see so it plans its work, such as Anthropic's beta task budget. The model-visible budget improves pacing; only your code can guarantee the cap."
+      },
+      "walk": {
+        "why": "Agents decide their own number of steps. A budget check in the loop is the only reliable way to cap what a task can cost.",
+        "wrong": "Relying on the model to stop on its own, or only on monthly spending alerts that fire long after the money is gone.",
+        "example": "Research assistants commonly cap rounds per question and summarise what they have when the cap is reached."
+      }
+    },
+    {
+      "from": "app", "to": "user", "label": "answer + cost",
+      "title": "Answer delivered; background work goes to batch",
+      "text": "The analyst gets the summary. Tomorrow's bulk re-summarisation of 500 old reports is sent through a batch API at a discount instead.",
+      "payload": [
+        ["delivered", "summary of 3 reports", "Within budget and latency targets."],
+        ["task cost", "$0.021 · 2 model calls", "Recorded as one completed task."],
+        ["bulk job", "500 reports via batch API", "Anthropic and OpenAI batch APIs both price at 50% off synchronous requests."],
+        ["batch completion", "within 24 h", "Fine for work nobody is waiting on."]
+      ],
+      "depth": {
+        "beginner": "The analyst gets the summary quickly and within budget. Separately, a large backlog of old reports needs summarising too, but nobody is waiting for it. That work is sent as a batch job, which the provider processes within a day at half the normal price. Matching urgency to the right option saves a lot of money.",
+        "practitioner": "Split traffic by urgency. Interactive requests get streaming, caching and tuned effort. Work that can wait, such as nightly reports, evaluations and backfills, goes through batch APIs: both Anthropic and OpenAI document a 50% discount, with results typically within 24 hours. Batching and caching can be combined.",
+        "expert": "Review the lever order regularly: free wins first (caching, input hygiene, output caps, batching for non-urgent work), then trade-offs (effort, model choice, routing) validated against an evaluation. Re-measure after model upgrades, because newer models can change both quality and token usage at the same settings."
+      },
+      "walk": {
+        "why": "Not all work is urgent. Paying interactive prices for background jobs is one of the easiest savings to miss.",
+        "wrong": "Running large backfills through the interactive endpoint, paying full price and competing with real users for rate limits.",
+        "example": "Teams often run nightly evaluation suites and document backfills through batch APIs to halve their cost."
+      },
+      "providers": {
+        "anthropic": "Message Batches API: asynchronous, 50% of standard prices; results keyed by your `custom_id`.",
+        "openai": "Batch API: 50% discount versus synchronous APIs; completion window `24h`."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Learn to price an agent task to the cent, see where the time goes, and keep both under control with budgets and a few proven levers.",
+    "thirtySeconds": [
+      "Cost comes from tokens: uncached input, cache writes, cheap cache reads and (usually most expensive) output, including reasoning.",
+      "Latency has two parts: time to the first word, driven by prompt size, and total time, driven by output length.",
+      "Set budgets per task and per user, enforce them inside the agent loop, and apply free wins (caching, lean prompts, batching) before trade-offs."
+    ],
+    "whyItMatters": "AI features are paid per token, and agents decide for themselves how many calls a task needs. That makes costs variable in a way traditional software is not. Teams that measure cost per completed task and enforce budgets can offer AI features profitably and predictably; teams that do not discover problems on the invoice. The same discipline also makes products feel faster, because latency comes from the same tokens.",
+    "analogy": "Think of hiring a freelancer by the word. You pay for what you hand them to read, a reduced rate for documents they have already read, and the most for what they write. You agree a maximum fee per job, send urgent jobs by courier and routine ones by regular post at half price.",
+    "audience": "Engineers and product managers responsible for AI features in production, and anyone who owns an AI budget.",
+    "minutes": 16,
+    "prerequisites": ["llm-call", "context-caching"],
+    "deepDives": [
+      {
+        "title": "The four token buckets",
+        "body": "Most bills come from four quantities: uncached input, cache writes, cache reads and output. Each has its own rate. On Anthropic's API, 5-minute cache writes cost 1.25× the input rate, 1-hour writes 2×, and reads about a tenth of the input rate on most models.\n\nOutput tokens, including hidden reasoning, are usually priced several times higher than input, so long answers and high effort settings dominate costs."
+      },
+      {
+        "title": "Two kinds of latency",
+        "body": "Time to first token is the wait before anything appears. It is driven mostly by prompt processing, so caching and shorter prompts help. Total time is driven mostly by how many tokens are generated and how fast.\n\nStreaming does not make the total shorter, but it changes how fast the product feels, because people start reading immediately."
+      },
+      {
+        "title": "The lever order",
+        "body": "Apply free wins first: prompt caching, removing unneeded context, sensible output caps, and batch processing for work that can wait. They cut cost without touching quality.\n\nThen consider trade-offs, validated against an evaluation: lower effort, smaller models for narrow steps, or routing. Judge every change by cost per completed task, not cost per call."
+      }
+    ],
+    "production": [
+      {
+        "title": "Runaway agent loops",
+        "body": "A confused agent can call tools and models repeatedly. Enforce caps on rounds, tokens, money and time in code, and alert on spend per hour per feature."
+      },
+      {
+        "title": "Stale price tables",
+        "body": "Prices change and differ by model and tier. Keep rates in versioned configuration, cite their effective date, and reconcile against provider usage reports."
+      },
+      {
+        "title": "Cheap calls, expensive tasks",
+        "body": "A cheaper model that needs retries or produces errors costs more per completed task. Compare options on outcomes, not unit prices."
+      },
+      {
+        "title": "Budget stops that hurt users",
+        "body": "Hard stops that throw errors waste paid work and frustrate users. End gracefully with a labelled partial answer and an option to continue."
+      }
+    ],
+    "lab": {
+      "title": "A cost calculator with budget enforcement",
+      "intro": "Compute per-call cost from usage (input, cache write, cache read, output) with a configurable price table, accumulate cost per task and per user, and stop a task gracefully when the next call would exceed its budget. All prices in the lab are illustrative.",
+      "dir": "labs/cost-latency"
+    },
+    "takeaways": [
+      "Price every call from its usage: uncached input, cache writes, cache reads and output each have their own rate.",
+      "Optimise cost per completed task, not cost per token.",
+      "Time to first token and total time have different causes and different fixes.",
+      "Enforce per-task and per-user budgets inside the loop and stop gracefully.",
+      "Use free wins first (caching, lean context, output caps, batching), then validated trade-offs."
+    ],
+    "faq": [
+      { "q": "Are output tokens really more expensive than input tokens?", "a": "On the major providers' price lists, output tokens are priced several times higher than input tokens, and reasoning counts as output. Rates change, so always check the current pricing page for the model you use." },
+      { "q": "Does streaming reduce cost?", "a": "No. It changes when text arrives, not how many tokens are used. It improves how fast the product feels." },
+      { "q": "When should I use a batch API?", "a": "For work nobody is waiting on, such as reports, backfills and evaluations. Anthropic and OpenAI both document a 50% discount, with results typically within 24 hours." },
+      { "q": "Should I always use the cheapest model?", "a": "Only where it completes the task as reliably. Compare models by cost per successful task on real examples, including retries and escalations." }
+    ],
+    "related": ["context-caching", "observability", "reasoning-structured", "evals"]
+  },
+  "quiz": [
+    {
+      "q": "With illustrative rates of $3 per million input tokens and $15 per million output tokens, what does a call with 2,000 uncached input tokens and 800 output tokens cost?",
+      "options": ["$0.0060", "$0.0120", "$0.0180", "$0.0280"],
+      "answer": 2,
+      "explain": "2,000 × $3/1M = $0.006 and 800 × $15/1M = $0.012, so $0.018 in total."
+    },
+    {
+      "q": "Which change most improves time to first token for a long prompt?",
+      "options": ["A higher max_tokens", "Caching the stable prefix", "A batch API", "A larger model"],
+      "answer": 1,
+      "explain": "Time to first token is dominated by prompt processing. Reusing a cached prefix removes most of that work."
+    },
+    {
+      "q": "A cheaper model costs half as much per call but needs three attempts per task on average. Compared with a pricier model that succeeds first time, it is…",
+      "options": ["Cheaper per task", "More expensive per completed task", "The same", "Impossible to compare"],
+      "answer": 1,
+      "explain": "Three attempts at half price cost 1.5× the single attempt, before counting the cost of any errors."
+    },
+    {
+      "q": "What should an agent do when the next step would exceed its task budget?",
+      "options": ["Continue silently", "Throw an error and discard the work", "Stop and return a labelled partial answer with an option to continue", "Switch to the largest model"],
+      "answer": 2,
+      "explain": "A graceful stop respects the budget and preserves the value of work already paid for."
+    }
+  ]
+}

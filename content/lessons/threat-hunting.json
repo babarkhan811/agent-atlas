@@ -6,6 +6,40 @@
   "category": "Cybersecurity automation",
   "title": "Threat hunting with AI",
   "summary": "Ask a question in plain English; the agent writes the log queries, spots the pattern and turns it into a permanent detection.",
+  "seoTitle": "Threat hunting with AI: from hypothesis to detection rule",
+  "seoDescription": "Watch an AI agent turn a hunting hypothesis into read-only log queries, find a regular beacon to a new domain, rule out benign traffic and write a Sigma rule.",
+  "objectives": [
+    "Describe hypothesis-driven threat hunting and how it differs from responding to alerts.",
+    "Explain how beaconing is detected from connection timing, and why benign software often looks similar.",
+    "Turn a confirmed hunting finding into a detection rule that is backtested for false positives."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    {
+      "title": "MITRE ATT&CK T1071.001: Application Layer Protocol, Web Protocols",
+      "url": "https://attack.mitre.org/techniques/T1071/001/"
+    },
+    {
+      "title": "MITRE ATT&CK T1573: Encrypted Channel",
+      "url": "https://attack.mitre.org/techniques/T1573/"
+    },
+    {
+      "title": "Sigma Detection Format: Rules",
+      "url": "https://sigmahq.io/docs/basics/rules.html"
+    },
+    {
+      "title": "Sigma specification (SigmaHQ)",
+      "url": "https://github.com/SigmaHQ/sigma-specification"
+    },
+    {
+      "title": "RITA: open-source beacon and network threat hunting tool (Active Countermeasures)",
+      "url": "https://github.com/activecm/rita"
+    },
+    {
+      "title": "MITRE ATT&CK data sources",
+      "url": "https://attack.mitre.org/datasources/"
+    }
+  ],
   "nodes": [
     {
       "id": "analyst",
@@ -54,9 +88,29 @@
         [
           "question",
           "\"Is any machine quietly phoning home on a regular timer?\"",
-          "Malware often checks in with its controller at fixed intervals (beaconing)."
+          "A testable hypothesis about attacker behaviour, not a vague \"find bad stuff\"."
+        ],
+        [
+          "technique",
+          "T1071.001 web protocols for command and control",
+          "The ATT&CK behaviour the hunt targets: malware checking in over normal-looking web traffic."
+        ],
+        [
+          "scope",
+          "all hosts · last 7 days",
+          "Where and when to look, which bounds cost and noise."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Alerts only catch what someone already wrote a rule for. Threat hunting means going looking for attackers who slipped past the rules. A hunt starts with a hunch you can test. Here the analyst asks: is any computer quietly contacting an outside server on a regular timer? Malware often \"phones home\" every minute or so to ask its operator for instructions, and that rhythm can give it away.",
+        "practitioner": "Good hunts are hypothesis-driven and tied to a technique: here, command-and-control over web protocols (ATT&CK T1071.001), often inside TLS (T1573). The hypothesis defines the data needed (connection logs with timestamps, source host, destination) and the scope. The hunting agent turns this plain-English question into queries, but the analyst owns the hypothesis and the conclusion.",
+        "expert": "Start from threat intelligence or detection gaps: which ATT&CK techniques can you not yet detect with your data sources? Write down what evidence would confirm or refute the hypothesis before querying, which guards against seeing patterns you expected to find. Record hunts, including negative ones, so coverage builds up over time."
+      },
+      "walk": {
+        "why": "Rules only catch known patterns. Hypothesis-driven hunting finds what rules missed and produces new rules, so detection coverage grows.",
+        "wrong": "Unfocused hunts (\"look for anything weird\") produce noise and burn time; hunts with no written-down outcome are repeated later from scratch.",
+        "example": "Hunting teams often run a recurring hunt for beaconing because many command-and-control frameworks check in on a schedule."
+      }
     },
     {
       "from": "agent",
@@ -67,53 +121,107 @@
       "payload": [
         [
           "query",
-          "connections | group by host, dest | where interval_stddev < 2s and count > 500",
-          "Very regular timing is suspicious; humans and browsers are irregular."
+          "connections | group by src_host, dest | where count > 500 and stddev(interval) < 2s (pseudo-query)",
+          "Simplified for the lesson. Very regular timing between connections is the beaconing signal."
+        ],
+        [
+          "schema",
+          "src_host, dest, dest_port, ts, bytes_out",
+          "The field names the model was given, so it writes queries against real columns."
+        ],
+        [
+          "access",
+          "read-only",
+          "The query tool cannot modify or delete data."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The agent asks the AI model to turn the question into a search the log system understands. The idea in plain words: for each computer and destination pair, look at the gaps between connections. People browsing the web are irregular; a program on a timer is very regular. So the search looks for pairs with many connections and almost identical gaps. The tool only reads logs, so a mistake cannot damage anything.",
+        "practitioner": "Give the model the real schema (field names and meanings) and example queries; this is the biggest factor in getting valid queries. The query groups by source and destination, computes intervals between connections, and keeps pairs with many connections and low variation. Run it through a read-only, rate-limited tool and review the query text in the case record.",
+        "expert": "Real beacons add jitter, a random delay, to blur the timing, so use a relative measure such as the coefficient of variation (standard deviation divided by mean) rather than a fixed seconds threshold, and allow for sleep periods. Validate generated queries with a dry run or `EXPLAIN` where supported, and set result and time limits to keep cost bounded."
+      },
+      "walk": {
+        "why": "Translating intent into a query language is where language models save analysts the most time, and read-only access makes mistakes cheap.",
+        "wrong": "Models invent field names when not given the schema, and a fixed-seconds threshold misses jittered beacons.",
+        "example": "Security analytics platforms increasingly offer natural-language-to-query assistants that show the generated query for review."
+      }
     },
     {
       "from": "agent",
       "to": "logs",
       "label": "run (read-only)",
       "title": "Search 7 days of traffic",
-      "text": "",
+      "text": "The query runs over a week of connection logs.",
       "payload": [
         [
           "scanned",
-          "2.1 billion connections",
-          ""
+          "about 2 billion connections (illustrative)",
+          "Large, which is why the query must be efficient and time-bounded."
         ],
         [
           "matches",
           "9 host/destination pairs",
-          ""
+          "Candidates with regular timing, not yet verdicts."
+        ],
+        [
+          "runtime",
+          "41 s (illustrative)",
+          "Tracked so expensive hunts can be optimised or scheduled off-peak."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The search runs across a week of network records, billions of connections in a large organisation. It returns nine computer-and-destination pairs that talk on a very regular rhythm. These are not yet bad: plenty of normal software also checks in on a timer. They are simply the shortlist worth a closer look.",
+        "practitioner": "Treat results as candidates. Record the exact query, time range, data sources and row counts in the hunt record so it can be repeated. If the result set is huge, the hypothesis or thresholds need tightening; if empty, check data coverage before concluding \"nothing found\", since missing logs look the same as a clean network.",
+        "expert": "Verify data completeness first: hosts that stopped sending logs, sampling in network sensors or proxy bypasses all create blind spots. Prefer aggregations close to the data rather than pulling raw rows into the model's context, which is slow, costly and can leak sensitive details."
+      },
+      "walk": {
+        "why": "Running the query at scale turns a hunch into a measurable shortlist.",
+        "wrong": "A clean result can simply mean missing data; pulling raw logs into the model wastes tokens and exposes sensitive information.",
+        "example": "Network hunting commonly works over proxy, DNS or flow logs aggregated in a SIEM or data lake."
+      }
     },
     {
       "from": "logs",
       "to": "agent",
       "label": "9 matches",
       "title": "Separate signal from noise",
-      "text": "The agent checks each match: 8 are known update services and monitoring tools. One isn't.",
+      "text": "The agent checks each match: most are known update services and monitoring tools. One isn't.",
       "payload": [
         [
           "suspicious",
-          "DEV-SRV-03 → 198.51.100.23 every 60s",
-          ""
+          "DEV-SRV-03 → 198.51.100.23 every ~60 s",
+          "Regular check-ins from a development server to an unknown address."
         ],
         [
           "domain age",
-          "9 days",
-          ""
+          "9 days (illustrative)",
+          "A recently registered destination domain is a common command-and-control trait."
         ],
         [
           "benign",
-          "8 (update checks, monitoring)",
-          "Added to an allowlist so they don't show up again."
+          "8 pairs: update checks, monitoring agents",
+          "Known software that also runs on timers; added to an allowlist with notes."
+        ],
+        [
+          "process",
+          "svchost-helper.exe (unsigned)",
+          "Endpoint data shows which program made the connections; an unsigned, oddly named binary."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The agent looks at each of the nine pairs. Eight are normal programs that also check in on a timer, such as update services and monitoring tools, so they are noted as harmless. One stands out: a development server contacts an unfamiliar address every minute, the domain was registered only days ago, and the program doing it has an odd name and no trusted signature. That is the finding.",
+        "practitioner": "Enrich each candidate with destination reputation and age, the responsible process from endpoint data, the asset owner and how long the pattern has existed. Benign periodic traffic is common, so maintaining a documented allowlist of known check-in services makes future hunts faster. The model summarises; the decision that something is malicious stays with the analyst.",
+        "expert": "Allowlist by process and destination together, not by destination alone, since attackers sometimes route through legitimate cloud services. Expire allowlist entries so they are reviewed. Look at the beacon's surrounding activity: data volumes, first-seen time and lateral connections from the host often reveal more than the timing itself."
+      },
+      "walk": {
+        "why": "Most regular traffic is legitimate. Enrichment and context are what turn one timing anomaly into a credible finding.",
+        "wrong": "Over-broad allowlists hide real threats that use trusted services; skipping endpoint context leaves you guessing which program is responsible.",
+        "example": "Beacon-analysis tools such as the open-source RITA score connection regularity and leave the final judgement to analysts."
+      },
+      "predict": {
+        "question": "Nine host-destination pairs have very regular timing. How many would you expect to be malicious?",
+        "reveal": "Usually very few. Update checks, monitoring agents and sync tools all run on timers. Regular timing narrows the search; context decides."
+      }
     },
     {
       "from": "agent",
@@ -124,29 +232,215 @@
       "payload": [
         [
           "evidence",
-          "timing chart · process name · first seen",
-          ""
+          "timing chart · process name · first seen · domain age",
+          "Everything needed to decide, linked to raw results."
+        ],
+        [
+          "ATT&CK",
+          "T1071.001 · T1573",
+          "Command and control over web protocols, inside an encrypted channel."
+        ],
+        [
+          "recommendation",
+          "open incident · preserve evidence · do not alert the attacker yet",
+          "Next steps; containment is planned by incident responders."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The agent hands the analyst a clear finding: which server, which address, how regular the timing is, which program, and when it started. The analyst agrees it looks like malware talking to its operator and opens an incident. From here a separate process takes over to investigate and contain it, carefully, so the attacker is not tipped off before the team is ready.",
+        "practitioner": "A hunting finding becomes an incident with its evidence attached. The recommendation includes preserving evidence (memory, process details, network captures) before containment, because blocking the destination immediately can alert the attacker and destroy context. Incident responders decide the timing.",
+        "expert": "Coordinate containment: if one beacon is found, assume others may exist, and scope before acting so all footholds can be removed together. Record the hunt outcome, including how the AI contributed, so you can evaluate its usefulness across hunts."
+      },
+      "walk": {
+        "why": "Hunting finds; incident response contains. A clean hand-off keeps evidence intact and avoids alerting the attacker too early.",
+        "wrong": "Blocking the destination on sight can make the attacker switch infrastructure while other footholds remain undiscovered.",
+        "example": "Incident response guidance commonly advises scoping and evidence preservation before containment when an attacker may still be active."
+      }
     },
     {
       "from": "agent",
       "to": "rules",
       "label": "new detection",
       "title": "Make it permanent",
-      "text": "A one-off hunt becomes an always-on rule. The agent tests it on 30 days of past data first to check it won't flood the team with false alarms.",
+      "text": "A one-off hunt becomes an always-on rule, tested on past data first.",
       "payload": [
         [
           "rule",
-          "\"Regular beaconing to new domain\"",
-          ""
+          "\"Regular beaconing to newly registered domain\"",
+          "A detection written in Sigma, a vendor-neutral rule format that converts to many SIEM query languages."
+        ],
+        [
+          "logsource",
+          "category: proxy",
+          "Which logs the rule reads, as Sigma's logsource section."
         ],
         [
           "backtest",
-          "1 true hit · 2 false alarms / month",
-          "Acceptable noise level."
+          "30 days: 1 true hit · 2 false alarms (illustrative)",
+          "Run on past data before enabling, to measure noise."
+        ],
+        [
+          "status",
+          "test",
+          "Sigma status values include experimental, test and stable; start as test."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The final step turns this one-time search into a permanent alarm, so next time it fires automatically. The agent drafts a detection rule in a standard format called Sigma and tests it against the last 30 days of logs. It would have caught this case and raised two false alarms a month, which the team judges acceptable. The rule starts in a trial status before becoming fully trusted.",
+        "practitioner": "Sigma rules describe a logsource and a detection section with named selections and a condition, plus level, status and known false positives. They can be converted into many SIEM query languages. Backtesting on historical data measures the alert volume and catches obvious false positives before analysts see them.",
+        "expert": "Pure timing logic is hard to express in some rule formats; it may need a scheduled analytic or correlation feature in your SIEM rather than a single-event rule. Version detections as code with tests (known-bad and known-good samples), tag them with ATT&CK IDs for coverage tracking, and review them when the environment changes."
+      },
+      "walk": {
+        "why": "Each successful hunt should leave behind a detection, so the same attacker technique is caught automatically next time.",
+        "wrong": "Rules enabled without backtesting flood queues with false alarms, and analysts start ignoring them.",
+        "example": "The public SigmaHQ rule repository shares community detections in a format many security tools can import."
+      },
+      "predict": {
+        "question": "Should the brand-new beaconing detection go straight into production as a high-severity alert?",
+        "reveal": "No. Backtest it on past data to measure false alarms, start it in a test status, and raise its level only once it proves reliable."
+      }
+    }
+  ],
+  "article": {
+    "promise": "See how an AI-assisted hunt goes from a one-line hypothesis to a confirmed beacon and a tested detection rule.",
+    "thirtySeconds": [
+      "Hunting tests a hypothesis about attacker behaviour that no existing alert covers.",
+      "The agent translates the question into read-only queries, then enriches candidates to separate benign timers from a real beacon.",
+      "The finding goes to incident response, and the hunt becomes a backtested Sigma detection."
+    ],
+    "whyItMatters": "Attackers who avoid known signatures can sit in a network for long periods. Hunting is how teams find them, but it needs query skills, data knowledge and time. An AI agent can write queries, summarise results and draft rules quickly, letting more people hunt more often. The analyst still owns the hypothesis and the verdict, and each hunt leaves behind a detection that makes the next attacker easier to catch.",
+    "analogy": "It is like a detective noticing that someone visits the same house at exactly the same time every day. Plenty of people do that for innocent reasons, such as a postman or a carer, so the detective checks who it is before calling it suspicious, then asks the patrol to watch for that pattern from now on.",
+    "audience": "Threat hunters, detection engineers and SOC analysts who want to use AI assistance for queries and rule writing.",
+    "minutes": 16,
+    "prerequisites": [
+      "software-plus-ai-agents",
+      "soc-triage"
+    ],
+    "deepDives": [
+      {
+        "title": "Beaconing in plain numbers",
+        "body": "A beacon is a program that contacts a server on a schedule. Measure the gaps between connections: the average gap tells you the period, and the spread of gaps tells you how regular it is. Dividing the spread (standard deviation) by the average gives the coefficient of variation; values near zero mean machine-like regularity.\n\nAttackers add jitter to hide this, so look for low variation across many connections rather than identical gaps."
+      },
+      {
+        "title": "Hypothesis-driven hunting",
+        "body": "A good hunt states what attacker behaviour you expect, what data would show it, and what would prove you wrong. Tie it to an ATT&CK technique so findings and gaps map onto a shared catalogue.\n\nNegative results are useful too: \"we looked for beaconing across all proxy logs and found none\" is coverage you can record."
+      },
+      {
+        "title": "Sigma rules",
+        "body": "Sigma is a vendor-neutral format for detections. A rule has a title, a logsource (category, product, service), a detection section with selections and a condition, a level and known false positives. Converters turn it into queries for many SIEMs, so one rule can serve different tools."
+      },
+      {
+        "title": "Where AI helps in a hunt, and where it does not",
+        "body": "Language models are strong at translating questions into queries, summarising large result sets and drafting rules. They are weak at knowing your environment: which servers normally talk to which services, or which odd-looking tool is an approved in-house script.\n\nKeep the analyst in charge of the hypothesis and the verdict, and give the agent documentation about your environment so its suggestions improve."
+      }
+    ],
+    "production": [
+      {
+        "title": "Missing data looks like safety",
+        "body": "Hosts that stopped logging or traffic that bypasses the proxy will never show up in a hunt. Check data coverage before concluding nothing was found."
+      },
+      {
+        "title": "Hallucinated fields and expensive queries",
+        "body": "Give the model the schema and example queries, validate generated queries before running, and enforce time and result limits so a hunt cannot overload the SIEM."
+      },
+      {
+        "title": "Allowlist rot",
+        "body": "Allowlists of benign beacons grow forever unless entries expire. Allowlist by process and destination together, and review entries regularly."
+      },
+      {
+        "title": "Detections nobody trusts",
+        "body": "Rules enabled without backtesting create noise and get ignored. Measure false positives on historical data and start new rules in a test status."
+      },
+      {
+        "title": "Query cost and performance",
+        "body": "Hunts over weeks of high-volume logs can be slow and expensive. Start with short time windows, aggregate close to the data, and schedule heavy hunts outside peak hours."
+      }
+    ],
+    "lab": {
+      "title": "Detect beaconing from connection timestamps",
+      "intro": "Group connections by host and destination, compute intervals, and flag regular timing using the coefficient of variation so jittered beacons are still caught. Includes an allowlist and minimum-count threshold. Offline, in Python and TypeScript, with tests.",
+      "dir": "labs/threat-hunting"
+    },
+    "takeaways": [
+      "Hunting tests a written hypothesis tied to an attacker technique; alerts only catch what rules already know.",
+      "AI agents help most by writing queries against a known schema and summarising candidates.",
+      "Regular timing narrows the search; context such as process, domain age and owner decides.",
+      "Check data coverage before declaring a hunt clean.",
+      "Every successful hunt should end as a backtested detection rule."
+    ],
+    "faq": [
+      {
+        "q": "How is threat hunting different from alert triage?",
+        "a": "Triage reacts to alerts that rules already raised. Hunting proactively searches for attacker activity that no rule has caught, starting from a hypothesis."
+      },
+      {
+        "q": "Can the AI run hunts on its own?",
+        "a": "It can run read-only queries and summarise results, but the hypothesis, the interpretation and any response should stay with an analyst."
+      },
+      {
+        "q": "What is jitter in beaconing?",
+        "a": "A random delay malware adds to its check-in timer so connections are not perfectly regular. Measuring relative variation over many connections still reveals the pattern."
+      },
+      {
+        "q": "Why write detections in Sigma?",
+        "a": "Sigma is vendor-neutral and can be converted into many SIEM query languages, so detections are portable and easy to share and review."
+      },
+      {
+        "q": "How often should we hunt?",
+        "a": "Regularly enough to cover your most likely threats. Many teams run recurring hunts for common techniques such as beaconing, plus ad-hoc hunts when new threat intelligence arrives. Record every hunt so coverage builds up."
+      }
+    ],
+    "related": [
+      "soc-triage",
+      "incident-response",
+      "software-plus-ai-agents",
+      "evals"
+    ]
+  },
+  "quiz": [
+    {
+      "q": "What does a coefficient of variation near zero say about the gaps between connections?",
+      "options": [
+        "They are random",
+        "They are very regular, like a timer",
+        "There were very few connections",
+        "The traffic was encrypted"
+      ],
+      "answer": 1,
+      "explain": "Low spread relative to the average gap means machine-like regularity, a classic beaconing trait."
+    },
+    {
+      "q": "The hunt returns no matches. What should you check before calling the network clean?",
+      "options": [
+        "The model's temperature",
+        "Whether the needed logs were actually collected for all hosts",
+        "The rule's severity",
+        "The analyst's hypothesis wording"
+      ],
+      "answer": 1,
+      "explain": "Missing or incomplete data produces empty results that look like a clean network."
+    },
+    {
+      "q": "Why not block the suspicious destination the moment it is found?",
+      "options": [
+        "Blocking is impossible",
+        "It can alert the attacker before all footholds are found and evidence preserved",
+        "Firewalls are slow",
+        "It would break the hunt query"
+      ],
+      "answer": 1,
+      "explain": "Responders usually scope and preserve evidence first so containment removes every foothold at once."
+    },
+    {
+      "q": "What should happen before a new detection rule is enabled?",
+      "options": [
+        "Nothing; enable it immediately",
+        "Backtest it on historical data to measure false positives",
+        "Delete the hunt notes",
+        "Lower its severity to informational"
+      ],
+      "answer": 1,
+      "explain": "Backtesting shows how noisy the rule is and whether it would have caught past activity."
     }
   ]
 }

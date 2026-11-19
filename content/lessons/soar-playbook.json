@@ -6,6 +6,36 @@
   "category": "Cybersecurity automation",
   "title": "Security playbooks on autopilot (SOAR)",
   "summary": "Routine threats get handled end to end in seconds: safe steps run automatically, risky ones wait for a person.",
+  "seoTitle": "SOAR playbooks with an AI decision step, explained",
+  "seoDescription": "How a SOAR playbook handles malware: automatic enrichment, an AI choice from fixed paths, reversible quarantine, verification, and humans for risky steps.",
+  "objectives": [
+    "Explain what a SOAR playbook is and how it differs from an open-ended AI agent.",
+    "Design an AI decision step that can only choose from a fixed set of playbook paths.",
+    "Classify playbook actions as read-only, reversible or disruptive and automate them accordingly."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    {
+      "title": "CISA: Federal Government Cybersecurity Incident and Vulnerability Response Playbooks",
+      "url": "https://www.cisa.gov/resources-tools/resources/federal-government-cybersecurity-incident-and-vulnerability-response-playbooks"
+    },
+    {
+      "title": "NIST SP 800-61 Rev. 3: Incident Response Recommendations",
+      "url": "https://csrc.nist.gov/pubs/sp/800/61/r3/final"
+    },
+    {
+      "title": "MITRE ATT&CK T1555.003: Credentials from Web Browsers",
+      "url": "https://attack.mitre.org/techniques/T1555/003/"
+    },
+    {
+      "title": "MITRE ATT&CK T1539: Steal Web Session Cookie",
+      "url": "https://attack.mitre.org/techniques/T1539/"
+    },
+    {
+      "title": "MITRE ATT&CK T1204.002: User Execution, Malicious File",
+      "url": "https://attack.mitre.org/techniques/T1204/002/"
+    }
+  ],
   "nodes": [
     {
       "id": "edr",
@@ -54,24 +84,39 @@
         [
           "alert",
           "\"Malicious file written to disk\"",
-          ""
+          "The EDR's detection. It saw a file land but not yet run."
         ],
         [
           "file",
           "invoice_scan.exe",
-          ""
+          "A lure name designed to look like a scanned document."
         ],
         [
           "sha256",
-          "9f2c…e81a",
-          "A fingerprint of the file."
+          "9f2c…e81a (illustrative)",
+          "A fingerprint of the file's exact contents, used to look it up and block it everywhere."
         ],
         [
           "host",
           "HR-PC-07",
-          ""
+          "The affected machine, used for scoping and containment."
+        ],
+        [
+          "executed",
+          "false",
+          "The EDR saw no process start from this file. This changes how urgent and disruptive the response must be."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "A security program on an HR computer spots a suspicious file called invoice_scan.exe being saved. That alert automatically starts a playbook: a pre-written checklist of response steps that a system called SOAR (Security Orchestration, Automation and Response) runs by itself. Playbooks make the response the same every time, whether it is 3 p.m. or 3 a.m. Importantly, the file has been saved but not opened yet.",
+        "practitioner": "A SOAR platform maps alert types to playbooks: ordered steps with branches, inputs and outputs. The trigger passes structured fields (file name, hash, host, whether it executed). `executed: false` matters: the file is a threat, but nothing has run yet, so a narrow, reversible action may be enough. Playbooks are deterministic by design, which is what makes them auditable.",
+        "expert": "Make triggers idempotent: the same alert delivered twice must not run destructive steps twice, so key runs by alert ID. Version playbooks like code with review and tests. Keep a dry-run mode that logs what would happen, which is invaluable when introducing new automation."
+      },
+      "walk": {
+        "why": "Routine, well-understood threats do not need a human to repeat the same ten clicks every time; a playbook does them consistently.",
+        "wrong": "Duplicate triggers can double-run actions, and untested playbook edits can break silently until the next real incident.",
+        "example": "Commodity malware caught on download is a typical first candidate for full playbook automation in many SOCs."
+      }
     },
     {
       "from": "soar",
@@ -82,63 +127,155 @@
       "payload": [
         [
           "verdict",
-          "malicious · 54/70 engines",
-          ""
+          "malicious · flagged by most engines (illustrative)",
+          "Multi-engine reputation for this exact hash."
         ],
         [
           "family",
           "info-stealer",
-          "Steals saved passwords and browser cookies."
+          "Malware that steals saved browser passwords and session cookies."
+        ],
+        [
+          "techniques",
+          "T1555.003 · T1539",
+          "Credentials from web browsers and stolen session cookies: what this family does once running."
+        ],
+        [
+          "first seen",
+          "2 days ago (illustrative)",
+          "A recent sample, consistent with an active campaign."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The playbook looks up the file's fingerprint in a reputation service that many security companies share. The verdict: it is known malware of a type called an info-stealer, which steals saved browser passwords and login cookies. Looking things up cannot break anything, so this step always runs on its own without asking anyone.",
+        "practitioner": "Hash lookups are exact: they match this file's precise contents. They are read-only and cheap, so they run unconditionally. The family label tells you what the malware would do if executed (here, credential theft from browsers, ATT&CK T1555.003 and T1539), which drives later steps such as resetting the user's passwords even if it never ran.",
+        "expert": "Hash reputation misses fresh or slightly modified samples, so pair it with behavioural detection and sandbox results. Uploading files to public scanners can leak sensitive documents or tip off attackers; prefer hash lookups and private analysis for internal files. Record which engines and versions produced each verdict."
+      },
+      "walk": {
+        "why": "A known-bad hash settles the question \"is this malware?\" in milliseconds and tells you what it is built to do.",
+        "wrong": "Unknown hashes are not safe hashes, and uploading confidential files to public services can leak them.",
+        "example": "Analysts routinely search a file hash in multi-engine reputation services as the first step of malware triage."
+      }
     },
     {
       "from": "soar",
       "to": "llm",
       "label": "decide",
       "title": "AI handles the judgement call",
-      "text": "Fixed rules cover the clear cases. The AI step reads the full context and picks a path from a fixed list, so it can't invent new actions.",
+      "text": "The AI step reads the full context and picks a path from a fixed list, so it can't invent new actions.",
       "payload": [
         [
           "allowed paths",
           "auto_contain · escalate · close_benign",
-          "The model chooses; it can't add options."
+          "The model chooses one; it cannot add options or call tools."
         ],
         [
           "choice",
           "auto_contain",
-          ""
+          "Its decision for this case."
         ],
         [
           "why",
-          "\"Known stealer, file not yet executed, single host\"",
-          "Logged for the audit trail."
+          "\"Known stealer, file not yet executed, single host, standard workstation\"",
+          "The reasoning, logged for the audit trail and for later evaluation."
+        ],
+        [
+          "guardrail",
+          "servers or executives → escalate",
+          "A rule in code that overrides the model for sensitive assets."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Some decisions need judgement: is it safe to handle this automatically, or should a person look? Here an AI model reads everything gathered so far, but it can only pick from three options written into the playbook: contain automatically, hand to a human, or close as harmless. It cannot invent a new action. It chooses to contain automatically and writes a short reason that is saved.",
+        "practitioner": "Use structured output with an enum of allowed paths: the model classifies, the playbook acts. Hard rules in code take precedence: sensitive asset classes always escalate regardless of the model. Include \"escalate\" as a valid choice so uncertainty has somewhere to go. The model has no tools in this step, which keeps it from being steered into actions.",
+        "expert": "This is a workflow with an AI step, not an open-ended agent: the control flow is fixed and testable. Evaluate the decision step on labelled historical cases before enabling `auto_contain`, and track per-path precision. Feed in alert fields as untrusted data, since file names and paths are attacker-chosen."
+      },
+      "walk": {
+        "why": "Fixed choices give you AI judgement with workflow predictability: every possible outcome is known and tested in advance.",
+        "wrong": "Letting the model call response tools directly removes the safety net; omitting an \"escalate\" option forces confident guesses.",
+        "example": "Teams adding AI to existing SOAR platforms usually start with a classification step that routes cases rather than an agent that acts."
+      },
+      "predict": {
+        "question": "The model must pick one of three paths. Why is \"escalate\" on the list at all?",
+        "reveal": "Because uncertainty needs somewhere to go. Without an escalate option, the model is forced to choose between acting and closing, even when it is unsure."
+      }
     },
     {
       "from": "soar",
       "to": "edr",
       "label": "quarantine file",
       "title": "Safe action: done automatically",
-      "text": "Quarantining one file is low-risk and easily undone, so it runs without waiting. Isolating a whole machine or a server would need approval.",
+      "text": "Quarantining one file is low-risk and easily undone, so it runs without waiting. Isolating a whole machine would need approval.",
       "payload": [
         [
           "action",
-          "quarantine invoice_scan.exe",
-          ""
+          "quarantine invoice_scan.exe on HR-PC-07",
+          "Moves the file into a locked area where it cannot run."
         ],
         [
           "also",
-          "block hash across all endpoints",
-          "One detection protects every machine."
+          "block this hash on all endpoints",
+          "Stops the same file from running anywhere in the fleet."
         ],
         [
-          "undo",
-          "restore from quarantine",
-          "Reversible actions are the best candidates for automation."
+          "risk",
+          "reversible",
+          "Restore from quarantine undoes it; that is why it can run automatically."
+        ],
+        [
+          "not done",
+          "host isolation",
+          "Disruptive; not needed because the file never ran."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The playbook now moves the file into quarantine, a locked box where it cannot run, and tells every computer in the company to block that same file. This happens instantly, without asking anyone, because it is easy to undo: if it turns out to be a mistake, the file can be restored. A bigger step like cutting the computer off the network would wait for a human, and here it is not needed.",
+        "practitioner": "Classify every playbook action by blast radius and reversibility. Quarantine of a single file and a hash block are reversible and narrow, so they are good automation candidates. Host isolation, account disablement and deletion are disruptive and need approval. The playbook records the exact action and how to reverse it.",
+        "expert": "Rate-limit automated actions per hour and per asset so a faulty detection cannot quarantine files across the whole fleet in minutes. Allow-list critical software so a false positive cannot block a business-critical binary. Every automated action should have a tested rollback."
+      },
+      "walk": {
+        "why": "Acting on reversible steps immediately removes the threat in seconds, while keeping the cost of a mistake small.",
+        "wrong": "Mass-automating disruptive actions turns one false positive into an outage; automation without rate limits magnifies errors.",
+        "example": "Many EDR platforms quarantine detected files automatically while leaving machine isolation as an analyst decision."
+      },
+      "predict": {
+        "question": "Quarantine is fast and reversible. Should the playbook also isolate the whole laptop, just to be safe?",
+        "reveal": "Not here. The file never ran, so isolation would disrupt the user without reducing much risk. Choose the narrowest action that removes the threat, and keep disruptive steps for when the evidence calls for them."
+      }
+    },
+    {
+      "from": "soar",
+      "to": "edr",
+      "label": "verify",
+      "title": "Check the action worked",
+      "text": "Playbooks should confirm the result, not assume it.",
+      "payload": [
+        [
+          "file present",
+          "no (in quarantine)",
+          "Confirms the quarantine succeeded."
+        ],
+        [
+          "process ran",
+          "no",
+          "A fresh check that the file never executed, so stolen credentials are unlikely."
+        ],
+        [
+          "other hosts",
+          "0 with this hash (illustrative)",
+          "A fleet search showing no other copies."
+        ]
+      ],
+      "depth": {
+        "beginner": "Instead of assuming the quarantine worked, the playbook checks: the file is gone from its original place, it never ran, and no other computer has a copy. This is like locking a door and then trying the handle. Automated steps can fail quietly, so good playbooks always confirm the result before declaring the job done.",
+        "practitioner": "Verification queries are read-only and should follow every action: confirm state changed, re-check for execution and search the fleet for the same hash. If verification fails, the playbook escalates instead of closing. Because the file never ran, credential theft is unlikely, but a precautionary password reset may still be policy.",
+        "expert": "Design for partial failure: API timeouts, offline endpoints and race conditions where the file runs between detection and quarantine. Offline hosts need the action queued and verified when they reconnect. Treat \"could not verify\" as its own outcome that routes to a human."
+      },
+      "walk": {
+        "why": "Automation that never checks its own work can report success while the threat is still there.",
+        "wrong": "An offline laptop never receives the quarantine, the playbook still reports success, and the file runs later.",
+        "example": "Mature playbooks end with a verification step and only auto-close a case when it passes."
+      }
     },
     {
       "from": "soar",
@@ -150,19 +287,187 @@
         [
           "ticket",
           "SEC-1932 · contained automatically",
-          ""
+          "The full timeline: trigger, lookups, AI decision, actions, verification."
         ],
         [
           "message",
           "\"Info-stealer quarantined on HR-PC-07, no execution seen\"",
-          ""
+          "A short, specific notification to the team channel."
+        ],
+        [
+          "review",
+          "sampled: 1 in 10 auto-closed cases",
+          "Humans audit a share of automatic decisions to catch drift."
         ],
         [
           "time",
-          "38 seconds end to end",
-          "vs ~30 minutes by hand."
+          "under a minute end to end (illustrative)",
+          "Manual handling of the same steps commonly takes much longer."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The playbook writes everything into a ticket: what triggered it, what was looked up, what the AI decided and why, what was done, and the check that it worked. It posts a short message to the security team's chat. People stay informed and in charge, but they did not have to do the repetitive clicking. Someone also reviews a random sample of these automatic cases to make sure the automation keeps making good choices.",
+        "practitioner": "Tickets are the audit trail and the evaluation dataset. Sampling auto-closed cases for human review catches silent errors and model drift. Track metrics per playbook: volume, automation rate, escalation rate, reversals (actions undone) and time to contain.",
+        "expert": "A rising reversal rate is the earliest signal that a detection or the AI decision step has drifted. Keep notifications concise and actionable to avoid alert fatigue in chat channels. Review playbooks after every real incident, as NIST SP 800-61 Rev. 3 encourages continuous improvement of response processes."
+      },
+      "walk": {
+        "why": "Records and notifications keep automation accountable; sampled reviews keep it honest over time.",
+        "wrong": "Unlogged automation cannot be audited, and noisy notifications train people to ignore the channel.",
+        "example": "Teams often run a weekly review of reversed or escalated automated cases to tune detections and playbooks."
+      }
+    }
+  ],
+  "article": {
+    "promise": "See how a security playbook handles routine malware end to end in under a minute, and how to add AI judgement without giving up control.",
+    "thirtySeconds": [
+      "A SOAR playbook is a fixed, tested sequence of response steps triggered automatically by an alert type.",
+      "An AI step can make the judgement call, but only by choosing from a fixed list of paths.",
+      "Read-only and reversible actions run automatically and are verified; disruptive ones wait for a person."
+    ],
+    "whyItMatters": "Most alerts are repeats of known patterns, and handling them by hand burns analyst time that real incidents need. Playbooks make the routine response fast and consistent. Adding an AI decision step handles the cases that need judgement, but the difference between safe and dangerous automation is in the design: fixed choices, risk-tagged actions, verification and human review of samples.",
+    "analogy": "A playbook is like an aircraft checklist: the same steps in the same order every time, so nothing is forgotten under pressure. The AI step is a co-pilot who can say \"we can handle this\" or \"call the captain\", but cannot invent new manoeuvres.",
+    "audience": "SOC engineers building automation, analysts who maintain playbooks, and security leaders deciding what to automate.",
+    "minutes": 15,
+    "prerequisites": [
+      "workflow",
+      "human-in-loop"
+    ],
+    "deepDives": [
+      {
+        "title": "Workflow versus agent",
+        "body": "A workflow follows a path designed in advance; an agent chooses its own path. SOAR playbooks are workflows, which makes them predictable and testable.\n\nPutting AI inside a workflow as a single decision step gets judgement where you need it while keeping every possible outcome known in advance."
+      },
+      {
+        "title": "Reversible first",
+        "body": "Sort actions by how easily they can be undone. Read-only lookups always run. Narrow, reversible actions such as file quarantine or a hash block are the safest to automate. Disruptive actions such as isolating machines or disabling accounts need approval until you have strong evidence the automation is reliable for that case."
+      },
+      {
+        "title": "Measuring a playbook",
+        "body": "Track how many cases run, how many close automatically, how many escalate, and how many automatic actions are later reversed. The reversal rate is the clearest early signal that something has drifted."
+      },
+      {
+        "title": "Dry runs and rollbacks",
+        "body": "Before switching a playbook on, run it in dry-run mode against past alerts and read what it would have done. Every action it can take should have a tested way to undo it.\n\nThis turns automation changes from a leap of faith into a reviewed, reversible release, just like a software deployment."
+      }
+    ],
+    "production": [
+      {
+        "title": "Runaway automation",
+        "body": "A bad detection can trigger thousands of runs. Rate-limit actions per hour and per asset, and alert when automation volume spikes."
+      },
+      {
+        "title": "Offline and partial failures",
+        "body": "Endpoints can be offline and APIs can time out. Queue actions, verify outcomes, and treat \"could not verify\" as a reason to escalate."
+      },
+      {
+        "title": "Untested playbook changes",
+        "body": "Treat playbooks as code: review changes, test them in dry-run mode on past alerts, and keep versions so you can roll back."
+      },
+      {
+        "title": "Attacker-chosen inputs",
+        "body": "File names, paths and command lines come from the attacker. Feed them to the AI step as untrusted data and keep hard rules that override its choice."
+      },
+      {
+        "title": "Notification fatigue",
+        "body": "If every automatic action posts a message, people stop reading the channel. Summarise routine activity, highlight only escalations and failures, and keep the full detail in the ticket."
+      }
+    ],
+    "lab": {
+      "title": "A playbook runner with risk-tagged steps",
+      "intro": "Run a small playbook engine: each step declares its risk, the AI decision is restricted to allowed paths, reversible actions run automatically, disruptive ones need approval, every action is verified and a dry-run mode logs what would happen. Offline, in Python and TypeScript, with tests.",
+      "dir": "labs/soar-playbook"
+    },
+    "takeaways": [
+      "Playbooks make routine response fast, consistent and auditable.",
+      "Put AI inside the workflow as a decision step that can only pick from fixed paths, including \"escalate\".",
+      "Automate read-only and reversible actions; keep disruptive ones behind approval.",
+      "Always verify that an action worked before closing the case.",
+      "Sample automatic decisions for human review and watch the reversal rate."
+    ],
+    "faq": [
+      {
+        "q": "What does SOAR stand for?",
+        "a": "Security Orchestration, Automation and Response: platforms that connect security tools and run response playbooks automatically or with human approval steps."
+      },
+      {
+        "q": "Should the AI be allowed to isolate machines?",
+        "a": "Not by default. Start with recommend-only, then allow it only for specific asset types and alert types where measured precision is high, and keep approval for servers and key people."
+      },
+      {
+        "q": "Do I need a commercial SOAR platform?",
+        "a": "No. Open-source workflow tools or simple scripts can run playbooks. The important parts are risk tagging, verification, logging and review, not the brand."
+      },
+      {
+        "q": "What if the AI decision step is wrong?",
+        "a": "Hard rules catch the most sensitive cases, reversible actions limit damage, sampled reviews detect errors, and the reversal rate shows drift early."
+      },
+      {
+        "q": "How do we decide what to automate first?",
+        "a": "Pick high-volume, well-understood alert types with narrow, reversible responses, such as quarantining known malware that has not executed. Measure them in recommend-only mode before turning on automatic actions."
+      }
+    ],
+    "related": [
+      "workflow",
+      "soc-triage",
+      "human-in-loop",
+      "evals"
+    ]
+  },
+  "quiz": [
+    {
+      "q": "What makes a SOAR playbook different from an open-ended AI agent?",
+      "options": [
+        "It cannot use tools",
+        "Its control flow is fixed and designed in advance",
+        "It never involves humans",
+        "It only runs at night"
+      ],
+      "answer": 1,
+      "explain": "A playbook is a workflow: every path is designed and testable. An agent chooses its own steps."
+    },
+    {
+      "q": "Which action is the best candidate for automatic execution?",
+      "options": [
+        "Disabling the user's account",
+        "Isolating the host",
+        "Quarantining the single malicious file",
+        "Wiping the laptop"
+      ],
+      "answer": 2,
+      "explain": "Quarantining one file is narrow and reversible, so a mistake is cheap to undo."
+    },
+    {
+      "q": "Why does the playbook verify after quarantining?",
+      "options": [
+        "To generate more logs",
+        "Because actions can fail silently, e.g. on offline machines",
+        "Because regulations require two steps",
+        "To slow the attacker down"
+      ],
+      "answer": 1,
+      "explain": "Automation can report success while the threat remains. Verification catches failures and escalates them."
+    },
+    {
+      "q": "Which metric most quickly signals that automation has drifted?",
+      "options": [
+        "Number of tickets",
+        "Reversal rate of automatic actions",
+        "Chat messages sent",
+        "Playbook length"
+      ],
+      "answer": 1,
+      "explain": "When people keep undoing automatic actions, the detection or the decision step has stopped matching reality."
+    },
+    {
+      "q": "Why should the AI decision step have no tools?",
+      "options": [
+        "Tools are too slow",
+        "So it can only classify, and the playbook stays in control of actions",
+        "Models cannot use tools",
+        "To save tokens"
+      ],
+      "answer": 1,
+      "explain": "The model's job here is to choose a path. Keeping actions in the playbook means every possible effect is known, tested and risk-tagged."
     }
   ]
 }

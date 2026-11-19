@@ -1,11 +1,33 @@
 {
   "id": "multi-agent",
   "path": "reliable-agents",
-  "order": 2,
+  "order": 3,
   "tier": "pro",
   "category": "Agents",
   "title": "Multi-agent teams",
   "summary": "An orchestrator splits a big job across specialist agents, each with its own context.",
+  "seoTitle": "Multi-agent systems explained: orchestrators, subagents and reviewers",
+  "seoDescription": "See how an orchestrator agent briefs subagents, why each gets its own context window, how reviewers catch errors, and when multi-agent is worth the extra tokens.",
+  "objectives": [
+    "Describe the orchestrator-worker pattern and why each subagent gets its own context window.",
+    "Write a subagent brief with an objective, output format, tools and boundaries.",
+    "Judge when a multi-agent design is worth its much higher token cost."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    {
+      "title": "Anthropic: How we built our multi-agent research system",
+      "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+    },
+    {
+      "title": "Anthropic: Building effective agents (orchestrator-workers, evaluator-optimizer)",
+      "url": "https://www.anthropic.com/engineering/building-effective-agents"
+    },
+    {
+      "title": "Zheng et al. (2023): Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena",
+      "url": "https://arxiv.org/abs/2306.05685"
+    }
+  ],
   "nodes": [
     {
       "id": "user",
@@ -49,113 +71,388 @@
       "to": "orch",
       "label": "task",
       "title": "A job too big for one context",
-      "text": "",
+      "text": "The request needs wide research, writing and checking: more reading than one agent can hold at once.",
       "payload": [
         [
           "task",
           "\"Write a market report on AI note-taking apps\"",
-          ""
+          "Broad, open-ended work that splits naturally into parts."
+        ],
+        [
+          "deliverable",
+          "report with comparison table and sources",
+          "Defining the output up front lets the orchestrator plan backwards from it."
+        ],
+        [
+          "budget",
+          "max 6 subagents · token cap per subagent",
+          "Illustrative limits. Multi-agent runs are expensive, so set ceilings before starting."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "You ask for something big: a market report on note-taking apps. Doing it well means reading dozens of web pages, writing a clear report and checking it. One AI working alone would have to hold all that reading in its short-term memory at once, and it would get cluttered. So the request goes to an orchestrator, an AI that acts like a project manager: it plans the work and hands parts to helpers.",
+        "practitioner": "The orchestrator is an agent whose main tools are other agents. It receives the user's goal, the expected deliverable and any limits. Decide budgets before the run starts: maximum subagents, tokens per subagent and wall-clock time. Multi-agent systems trade money for breadth and speed, so a cap protects you from a run that keeps spawning work.",
+        "expert": "Anthropic reports that in its research system agents used about 4× the tokens of a chat interaction and multi-agent systems about 15×. That cost must be justified by task value. Persist the plan and intermediate results outside the context window so a long run can resume after a failure instead of restarting from scratch."
+      },
+      "walk": {
+        "why": "Breadth-first tasks, such as research across many sources, exceed what one context window can hold comfortably.",
+        "wrong": "Without budgets, an orchestrator can spawn far more work than the task deserves and run up a large bill.",
+        "example": "Deep-research features in AI assistants split a question across several parallel searches before writing one combined answer."
+      }
     },
     {
       "from": "orch",
       "to": "research",
       "label": "subtask",
       "title": "Plan and delegate",
-      "text": "The orchestrator breaks the job into parts. Each sub-agent starts with a clean, focused context instead of one huge messy one.",
+      "text": "The orchestrator breaks the job into parts. Each subagent starts with a clean, focused context instead of one huge messy one.",
       "payload": [
         [
-          "brief",
-          "\"Find 8 competitors: pricing, features, users\"",
-          "Briefs must be self-contained; sub-agents can't see the main chat."
+          "objective",
+          "\"Find 8 competitors: pricing, key features, target users\"",
+          "What done looks like for this subagent."
+        ],
+        [
+          "output_format",
+          "table: name · price · features · source URL",
+          "Fixed format so results from several subagents can be merged."
         ],
         [
           "tools",
           "web_search, fetch_page",
-          "Only what this role needs."
+          "Only what this role needs. The researcher cannot write files or send messages."
+        ],
+        [
+          "boundaries",
+          "\"Only products launched before 2026; skip enterprise suites\"",
+          "Prevents overlap with other subagents and wasted effort."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The project manager writes a clear brief for the researcher: find eight competitors, collect their prices and features, and present them as a table with links. It also says what not to cover, so helpers don't repeat each other's work. The researcher starts fresh, with only this brief in mind, which keeps it focused. Several researchers can work at the same time on different slices.",
+        "practitioner": "Anthropic found briefs work best when they include an objective, an output format, guidance on tools and sources, and clear task boundaries; vague briefs caused duplicated work and gaps. Subagents cannot see the orchestrator's conversation, so briefs must be self-contained. Run independent subagents in parallel and give each only the tools its role needs.",
+        "expert": "Delegation quality is the main failure point. Teach the orchestrator to scale effort to difficulty: simple questions need one agent and a few tool calls, broad ones several subagents. Parallelism cuts wall-clock time but not cost. Give subagents least-privilege tools so a confused or manipulated subagent cannot affect anything outside its job."
+      },
+      "walk": {
+        "why": "A clean context per subagent avoids the clutter and distraction of one giant conversation, and parallel subagents finish sooner.",
+        "wrong": "Short, vague briefs (\"research competitors\") lead subagents to duplicate each other, misread the scope, or stop too early.",
+        "example": "Anthropic's research system has a lead agent start several subagents in parallel, each exploring a different aspect of the question."
+      },
+      "predict": {
+        "question": "Two researcher subagents both receive the brief \"research note-taking apps\". What is likely to go wrong?",
+        "reveal": "They will overlap heavily and leave gaps, because neither knows what the other covers. Clear boundaries in each brief prevent duplicated work."
+      }
     },
     {
       "from": "research",
       "to": "orch",
       "label": "findings",
       "title": "Return a summary, not everything",
-      "text": "The researcher might read 40 pages but returns a short report. That keeps the orchestrator's context small.",
+      "text": "The researcher might read dozens of pages but returns a short report. That keeps the orchestrator's context small.",
       "payload": [
         [
           "read",
-          "40 pages · 210k tokens",
-          ""
+          "40 pages · ~200k tokens (illustrative)",
+          "Everything the subagent read stays in its own context and is discarded afterwards."
         ],
         [
           "returned",
-          "1.8k-token table",
-          "Condensing is the main benefit of sub-agents."
+          "~1.8k-token table with sources (illustrative)",
+          "Only the condensed result goes back to the orchestrator."
+        ],
+        [
+          "artifacts",
+          "full notes saved to shared storage",
+          "Large outputs can be stored outside and passed back as a reference."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The researcher may read forty pages, but it reports back only a short table with links, like an assistant handing their manager a one-page summary instead of a stack of printouts. That keeps the project manager's head clear for planning and combining everyone's work.",
+        "practitioner": "Condensing is the main benefit of subagents: each explores in its own context window and returns only the most important information. For bulky outputs, subagents can write files to shared storage and return a lightweight reference. Require sources in the returned format so later steps, and reviewers, can check claims.",
+        "expert": "Summaries lose information, so decide what must survive: citations, uncertainty and contradictions between sources. Return structured data rather than prose where possible. Watch for confident summaries of thin evidence; a field such as `confidence` or `gaps` helps the orchestrator decide whether to send another subagent."
+      },
+      "walk": {
+        "why": "The orchestrator's context is precious; filling it with raw pages would crowd out the plan and other results.",
+        "wrong": "Over-compressed summaries drop the caveats and sources that a reviewer needs, so errors slip through later.",
+        "example": "A due-diligence assistant gives each subagent one company to research and receives back a fixed-format profile with links."
+      }
     },
     {
       "from": "orch",
       "to": "writer",
       "label": "draft",
       "title": "Hand off to a writer",
-      "text": "",
+      "text": "The orchestrator gives the combined findings to a writer with an outline and tone guide.",
       "payload": [
         [
           "input",
-          "findings table + outline + tone guide",
-          ""
+          "merged findings table + outline + tone guide",
+          "Everything the writer needs, and nothing it doesn't."
+        ],
+        [
+          "constraint",
+          "\"Every claim must cite a source from the table\"",
+          "Keeps the draft grounded in the research rather than the model's memory."
+        ],
+        [
+          "tools",
+          "none",
+          "The writer only writes. No web access means no unverified new claims."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Next the project manager passes the combined research to a writer agent with an outline and a style guide. The writer has one job: turn the research into a clear report. It is told to back every statement with a source from the research table, so the report sticks to what was actually found.",
+        "practitioner": "Specialised roles with narrow instructions are easier to prompt and test than one agent doing everything. The writer gets no web tools, so it cannot introduce new, unchecked facts; its job is synthesis. Pass structured findings, not raw transcripts, to keep the writer's context focused.",
+        "expert": "Sequential handoffs add latency and can amplify early errors: a wrong row in the research table becomes a confident paragraph. Carry source IDs through every stage so reviewers can trace each sentence back to evidence. Consider whether the writer needs to be a separate agent at all; sometimes the orchestrator can write directly."
+      },
+      "walk": {
+        "why": "Separating research from writing lets each role use a prompt and toolset tuned to one job.",
+        "wrong": "A writer with web access may \"fill gaps\" with fresh, unverified searches or its own memory, breaking the source trail.",
+        "example": "Content teams often use one model to gather facts and another, with no browsing, to draft copy from those facts."
+      }
     },
     {
       "from": "writer",
       "to": "review",
       "label": "draft v1",
       "title": "Independent review",
-      "text": "A separate agent with a critical brief catches mistakes the writer can't see in its own work.",
+      "text": "A separate agent with a critical brief checks the draft against the sources and a rubric.",
       "payload": [
         [
+          "rubric",
+          "factual accuracy · citation accuracy · completeness · source quality",
+          "Explicit criteria. Anthropic's research evals used similar rubric items."
+        ],
+        [
           "checks",
-          "facts vs sources · missing competitors · claims without data",
-          ""
+          "claims vs sources · missing competitors · unsupported numbers",
+          "What the reviewer must look for."
+        ],
+        [
+          "output",
+          "pass/fail + list of issues with locations",
+          "Structured so the orchestrator can act on it."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Before anything reaches you, a reviewer agent reads the draft with a checklist: are the facts right, do the links support the claims, is anything important missing? It is like a second pair of eyes. Because it did not write the draft, it is less likely to overlook its own mistakes.",
+        "practitioner": "This is the evaluator-optimiser pattern: one model drafts, another critiques against a rubric. Give the reviewer the sources, not just the draft, so it can check claims. Ask for a structured verdict, such as pass or fail plus specific issues with locations. Anthropic reports that a single LLM judge call scoring against a rubric was its most consistent approach.",
+        "expert": "LLM judges have known biases, including position, verbosity and self-enhancement bias, documented by Zheng et al. (2023). Use a different model or at least a distinct prompt for review, calibrate the judge against human labels, and keep humans checking high-stakes outputs. A reviewer that always says \"looks good\" is worse than none."
+      },
+      "walk": {
+        "why": "Critiquing is easier than writing correctly the first time, and an independent check catches errors the writer cannot see.",
+        "wrong": "Reviewers that share the writer's blind spots, or have no access to sources, approve confident nonsense.",
+        "example": "Code-generation tools often have a second pass that runs tests and asks a model to critique failures before presenting a fix."
+      },
+      "predict": {
+        "question": "Why give the reviewer the original sources and not only the draft?",
+        "reveal": "Without sources it can only judge style and plausibility. With them it can check whether each claim is actually supported."
+      }
     },
     {
       "from": "review",
       "to": "orch",
       "label": "3 issues",
       "title": "Feedback loops back",
-      "text": "The orchestrator decides whether to send it back for another round or accept it.",
+      "text": "The orchestrator decides whether to send the draft back for another round or accept it.",
       "payload": [
         [
           "issues",
-          "price outdated · 1 uncited claim · missing summary",
-          ""
+          "1 outdated price · 1 uncited claim · missing summary",
+          "Illustrative findings, each tied to a location in the draft."
+        ],
+        [
+          "decision",
+          "revise (round 2 of max 2)",
+          "A round limit stops endless back-and-forth."
+        ],
+        [
+          "reroute",
+          "re-check price with researcher",
+          "Some issues need new evidence, not just rewriting."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The reviewer found three problems: an old price, a claim without a source, and a missing summary. The project manager decides what to do: ask the researcher to re-check the price and the writer to fix the rest. There is a limit of two review rounds, so the team cannot keep going back and forth forever.",
+        "practitioner": "Route each issue to the role that can fix it: factual gaps go back to research, wording to the writer. Cap revision rounds and define what happens at the limit, usually escalating to a human with the outstanding issues listed. Track issue counts per round to see whether revisions actually converge.",
+        "expert": "Loops are where multi-agent costs balloon. Log every round with tokens used, and stop early when the issue list stops shrinking. If the same issue type recurs across many runs, fix it upstream in the brief or tools rather than relying on review to catch it each time."
+      },
+      "walk": {
+        "why": "Targeted feedback improves the result more cheaply than regenerating everything.",
+        "wrong": "Unlimited rounds burn tokens; reviewers and writers can disagree indefinitely or introduce new errors while fixing old ones.",
+        "example": "Editorial workflows commonly allow a fixed number of revision rounds before an editor makes the final call."
+      }
     },
     {
       "from": "orch",
       "to": "user",
       "label": "final report",
       "title": "Delivered",
-      "text": "Multi-agent setups use several times more tokens than one agent. Use them when the task really splits into independent parts.",
+      "text": "The final report arrives with sources, plus a record of what each agent did.",
       "payload": [
         [
           "agents",
-          "3 · 2 review rounds",
-          ""
+          "1 orchestrator · 3 subagents · 2 review rounds (illustrative)",
+          "Useful to show users how the result was produced."
         ],
         [
           "tokens",
-          "≈ 4× a single agent",
-          ""
+          "many times a single chat (Anthropic reports ~15× for its system)",
+          "Multi-agent runs are costly; measure your own ratio."
+        ],
+        [
+          "trace",
+          "plan, briefs, findings, reviews, final",
+          "Kept for debugging and evaluation."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "You receive the finished report with its sources. Behind it, several AI helpers did research, writing and checking. That teamwork costs much more than a single chat: Anthropic reports its multi-agent research system used about fifteen times the tokens of a normal chat. It is worth it for big, broad jobs, and wasteful for simple questions.",
+        "practitioner": "Store the full trace: plan, every brief, every subagent result and every review. It explains the output and is the raw material for evaluation. Multi-agent fits work that splits into independent parts, such as research; Anthropic notes it fits poorly where all agents need the same shared context or where tasks have many dependencies, which includes much coding work.",
+        "expert": "Evaluate multi-agent systems end to end and per role: did the orchestrator decompose well, did subagents follow briefs, did the reviewer catch planted errors? Anthropic reports its multi-agent setup outperformed a single agent by 90.2% on an internal research eval, and that token usage explained most performance variance on BrowseComp. Measure on your own tasks before assuming similar gains."
+      },
+      "walk": {
+        "why": "A traceable result builds trust and lets you improve the weakest role rather than guessing.",
+        "wrong": "Teams adopt multi-agent designs for tasks a single agent or workflow would handle, paying several times more for no quality gain.",
+        "example": "Research assistants that show their search steps and sources let users judge an answer instead of trusting it blindly."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Understand when and how to split work across several AI agents, and why it can be both more powerful and much more expensive.",
+    "thirtySeconds": [
+      "An orchestrator agent breaks a big job into parts and briefs specialist subagents with clear, self-contained instructions.",
+      "Each subagent works in its own clean context and returns a condensed result, keeping the orchestrator focused.",
+      "Independent reviewers catch errors before delivery, but the whole system uses many times more tokens than a single chat."
+    ],
+    "whyItMatters": "Some jobs are too broad for one agent: researching a market, auditing many systems, comparing many documents. Splitting the work lets agents run in parallel, keeps each context focused and adds independent checking. But every extra agent costs tokens, time and complexity. Knowing how to write good briefs, condense results, cap loops and decide when not to use multiple agents is what makes these systems worth their price.",
+    "analogy": "It works like a newsroom. An editor assigns stories to reporters with a clear brief, each reporter investigates alone and files a short story, a sub-editor checks facts, and the editor assembles the front page. Nobody reads every source, but the paper still covers everything.",
+    "audience": "Developers and architects designing agent systems, and technical leads deciding whether a multi-agent design is worth its cost.",
+    "minutes": 17,
+    "prerequisites": [
+      "agent-loop",
+      "workflow"
+    ],
+    "deepDives": [
+      {
+        "title": "Why separate context windows help",
+        "body": "Every agent works inside a context window: the text it can see at once. When one agent reads forty pages, those pages crowd out its plan and instructions. Giving each subagent its own window means it reads deeply, then hands back only what matters.\n\nAnthropic describes this as subagents condensing the most important tokens for the lead agent. The orchestrator stays small and focused on coordination."
+      },
+      {
+        "title": "Anatomy of a good brief",
+        "body": "Subagents cannot see the conversation that led to their task, so the brief is all they know. Anthropic found effective briefs include an objective, an output format, guidance on which tools and sources to use, and clear boundaries.\n\nThink of it as delegating to a capable contractor who has never met you: be specific about what done looks like and what is out of scope."
+      },
+      {
+        "title": "When not to use multiple agents",
+        "body": "Multi-agent designs shine when work splits into independent, parallel parts. They fit poorly when every agent needs the same shared context, when steps depend tightly on each other, or when the task's value does not justify a cost that Anthropic measured at around fifteen times a chat for its research system.\n\nStart with a single agent or a workflow, measure, and add agents only where measurements show a real gain."
+      },
+      {
+        "title": "Scaling effort to the question",
+        "body": "Not every request deserves a team. Anthropic gave its lead agent explicit rules of thumb: simple fact-finding needs one agent with 3 to 10 tool calls, direct comparisons might need 2 to 4 subagents with 10 to 15 calls each, and complex research might use more than 10 subagents with clearly divided responsibilities.\n\nWriting such rules into the orchestrator's instructions stops it over-investing in simple questions, which is the most common way multi-agent systems waste money."
+      }
+    ],
+    "production": [
+      {
+        "title": "Runaway cost",
+        "body": "Each subagent and review round multiplies token use. Set caps on subagents, rounds, tokens and wall-clock time, and alert when a run approaches them."
+      },
+      {
+        "title": "Errors that compound",
+        "body": "A mistake early in research becomes a confident paragraph later. Carry source IDs through every stage and have reviewers check claims against sources, not just the draft."
+      },
+      {
+        "title": "Hard-to-debug failures",
+        "body": "With many agents, it is unclear which one went wrong. Trace every brief, result and decision, and evaluate each role separately as well as the final output."
+      },
+      {
+        "title": "Least privilege per role",
+        "body": "Give each subagent only the tools its role needs. A research subagent reading untrusted web pages should not also hold tools that send email or change data."
+      },
+      {
+        "title": "Waiting on the slowest subagent",
+        "body": "When the orchestrator waits for a whole batch, one slow or stuck subagent blocks everything. Give each subagent a time limit, return partial results when it expires, and let the orchestrator decide whether to retry or continue without it."
+      }
+    ],
+    "takeaways": [
+      "An orchestrator plans and delegates; subagents work in their own context and return condensed results.",
+      "Briefs need an objective, output format, tools and boundaries, because subagents see nothing else.",
+      "Independent reviewers with access to sources catch errors writers miss, but judges have known biases.",
+      "Cap subagents, rounds and tokens; multi-agent systems can use around fifteen times the tokens of a chat.",
+      "Use multiple agents for broad, parallel work, not for tasks a single agent or workflow handles well."
+    ],
+    "faq": [
+      {
+        "q": "Is a multi-agent system always better than one agent?",
+        "a": "No. It helps on broad tasks that split into independent parts, and it costs much more. For many tasks a single agent or a fixed workflow is cheaper and just as good."
+      },
+      {
+        "q": "Do the subagents talk to each other?",
+        "a": "In the orchestrator-worker pattern they usually report only to the orchestrator. Direct agent-to-agent communication is possible, and protocols such as A2A standardise it, but it adds coordination complexity."
+      },
+      {
+        "q": "Should subagents use a smaller model?",
+        "a": "Often, for well-defined subtasks such as reading and summarising. Keep a capable model for planning and review, and measure quality before switching."
+      },
+      {
+        "q": "How do I test a multi-agent system?",
+        "a": "Evaluate the final output against a rubric, and also check each role: plan quality, brief adherence and whether the reviewer catches deliberately planted errors."
+      },
+      {
+        "q": "Do subagents run at the same time?",
+        "a": "Often in parallel batches. Anthropic notes its lead agents waited for each batch of subagents to finish before continuing, which is simpler but means the whole run can be held up by one slow subagent. Fully asynchronous designs add more parallelism but are harder to coordinate."
+      }
+    ],
+    "related": [
+      "agent-loop",
+      "evals",
+      "a2a",
+      "cost-latency"
+    ]
+  },
+  "quiz": [
+    {
+      "q": "Why does each subagent get its own context window?",
+      "options": [
+        "To use fewer tokens overall",
+        "So deep reading doesn't crowd out the orchestrator's plan",
+        "Because models cannot share memory",
+        "To avoid needing tools"
+      ],
+      "answer": 1,
+      "explain": "Separate windows let subagents read deeply and return only condensed results. Total tokens usually go up, not down."
+    },
+    {
+      "q": "Which brief is most likely to work well?",
+      "options": [
+        "\"Research competitors\"",
+        "\"Find 8 competitors launched before 2026; return a table of name, price, features and source URL; use web search only; skip enterprise suites\"",
+        "\"Be thorough\"",
+        "\"Do what the other agent didn't\""
+      ],
+      "answer": 1,
+      "explain": "It states the objective, output format, tools and boundaries, which is what subagents need because they see nothing else."
+    },
+    {
+      "q": "According to Anthropic's description of its research system, roughly how many times the tokens of a chat did multi-agent runs use?",
+      "options": [
+        "About the same",
+        "About 2×",
+        "About 15×",
+        "About 100×"
+      ],
+      "answer": 2,
+      "explain": "Anthropic reported about 4× for single agents and about 15× for multi-agent systems compared with chat."
+    },
+    {
+      "q": "Which task is the weakest fit for a multi-agent design?",
+      "options": [
+        "Comparing 20 vendors' pricing",
+        "Researching many sources in parallel",
+        "Editing one tightly coupled function where every change depends on the last",
+        "Auditing 50 separate servers"
+      ],
+      "answer": 2,
+      "explain": "Tightly dependent work that needs one shared context gains little from parallel agents and pays the coordination cost."
     }
   ]
 }

@@ -18,7 +18,7 @@ Source brief: `agent-atlas-phase2-prompt.md` (owner, 2026-11-19).
 | # | Milestone | Status |
 |---|---|---|
 | A1 | Content engine + 3 pilot lessons (LLM call, Tool use, Software + AI agents) | **done** (tag `a1`) |
-| A2 | Remaining 18 lessons, glossary pages, guide sub-pages, 6 new lessons, freshness CI | next |
+| A2 | Remaining 18 lessons, glossary pages, guide sub-pages, 6 new lessons, freshness CI | **done** (tag `a2`): 27 lessons on the full anatomy, 20 labs, 52 glossary term pages, 9 guide parts, path pages, /learn hub, About & editorial policy |
 | B1 | Depth design system (tokens, components, both themes, reduced motion, visual regression) | todo |
 | B2 | 3D stage (pan/zoom/orbit, minimap, bigger stage), landing page hero, optional WebGL mode | todo |
 | C1 | Pricing, auth, Polar payments, server-side gating + leak test, legal pages, analytics, SEO completion | todo; needs the server deployment (Vercel) |

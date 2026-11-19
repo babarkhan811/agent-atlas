@@ -1,0 +1,309 @@
+{
+  "id": "reasoning-structured",
+  "path": "reliable-agents",
+  "order": 1,
+  "tier": "pro",
+  "category": "Foundations",
+  "title": "Reasoning models and structured outputs",
+  "summary": "Let the model think before it answers, then force the answer into a shape your code can trust.",
+  "seoTitle": "Reasoning models and structured outputs explained",
+  "seoDescription": "How reasoning (thinking) tokens and effort settings work, what they cost, and how JSON Schema structured outputs plus validation make model answers safe to use in code.",
+  "objectives": [
+    "Explain what reasoning tokens are, how effort settings control them, and why you pay for thinking you may not see.",
+    "Request structured output with a JSON Schema and know what the schema guarantees and what it does not.",
+    "Validate model output against business rules and recover with a bounded retry instead of crashing."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    { "title": "Anthropic: Adaptive thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking" },
+    { "title": "Anthropic: Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" },
+    { "title": "Anthropic: Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" },
+    { "title": "OpenAI: Reasoning models", "url": "https://developers.openai.com/api/docs/guides/reasoning" },
+    { "title": "OpenAI: Structured outputs", "url": "https://developers.openai.com/api/docs/guides/structured-outputs" },
+    { "title": "Google: Gemini thinking", "url": "https://ai.google.dev/gemini-api/docs/thinking" },
+    { "title": "Google: Gemini structured output", "url": "https://ai.google.dev/gemini-api/docs/structured-output" }
+  ],
+  "nodes": [
+    { "id": "user", "label": "Customer", "kind": "user", "x": 9, "y": 50 },
+    { "id": "app", "label": "Support app", "kind": "app", "x": 34, "y": 50 },
+    { "id": "model", "label": "Reasoning model", "kind": "model", "x": 66, "y": 16 },
+    { "id": "guard", "label": "Validator", "kind": "guard", "x": 66, "y": 84 },
+    { "id": "crm", "label": "Ticket system", "kind": "tool", "x": 91, "y": 50 }
+  ],
+  "steps": [
+    {
+      "from": "user", "to": "app", "label": "email",
+      "title": "A messy customer email arrives",
+      "text": "The app must turn free text into a ticket with a category, priority and refund decision that code can act on.",
+      "payload": [
+        ["subject", "\"Charged twice AND the app crashes\"", "Two problems in one message, a common source of misclassification."],
+        ["body", "≈ 180 words, mentions order #A-5521 and £89", "Free text: amounts, IDs and tone must be extracted reliably."],
+        ["goal", "create one ticket in the ticket system", "The output will be read by code, not by a person."]
+      ],
+      "depth": {
+        "beginner": "A customer writes an email about two problems at once: they were charged twice, and the app keeps crashing. A person would read it, think for a moment, and fill in a ticket form. We want the AI to do the same, but its answer will be read by software, so it must come back in an exact, predictable format rather than a friendly paragraph.",
+        "practitioner": "This is an extraction-and-decision task: read unstructured text, reason about it (which problem matters more, is a refund due) and produce a typed record. Two features help: reasoning, where the model works through the problem before answering, and structured outputs, where the answer is constrained to a JSON Schema your code defines.",
+        "expert": "Decide what the model owns and what code owns. The model is good at reading intent and ambiguity; code should own anything with a hard rule, such as refund limits, SLA timers and customer tiers. Design the schema around the decision your code needs, not around everything the email might contain."
+      },
+      "walk": {
+        "why": "Free text is easy for people and hard for programs. Turning it into a fixed structure is what lets automation act on it safely.",
+        "wrong": "Parsing a chatty answer with regular expressions breaks the first time the model phrases things differently.",
+        "example": "Helpdesks commonly use AI to triage incoming email into category, priority and owner before a human reviews the queue."
+      }
+    },
+    {
+      "from": "app", "to": "model", "label": "request + effort + schema",
+      "title": "The request asks for thinking and a fixed answer shape",
+      "text": "The app sets how hard the model should think and gives it a JSON Schema for the answer.",
+      "payload": [
+        ["thinking", "{ type: \"adaptive\" }", "Anthropic: the model decides when and how much to think."],
+        ["output_config.effort", "\"medium\"", "Anthropic: how much effort (and tokens) to spend; levels run from low to max."],
+        ["output_config.format", "{ type: \"json_schema\", schema: TICKET }", "Anthropic: the answer must match this schema."],
+        ["TICKET.required", "[category, priority, refund_requested, summary]", "Fields the answer must always contain."],
+        ["TICKET.additionalProperties", "false", "No extra fields allowed; keeps the output predictable."]
+      ],
+      "depth": {
+        "beginner": "The app tells the AI two things besides the email. First, how hard to think: a quick look or a careful one. Second, the exact form to fill in: a category from a fixed list, a priority, whether a refund was asked for, and a one-line summary. Giving the form up front means the answer comes back ready for the ticket system.",
+        "practitioner": "Reasoning models expose an effort control that trades quality against cost and speed. Structured outputs take a JSON Schema and constrain the answer to match it. Use `enum` for fixed choices, mark every field `required`, and set `additionalProperties: false`. Field names and parameter shapes differ between providers, so check the comparison at Expert depth.",
+        "expert": "Schema support varies: for example, Anthropic's structured outputs do not enforce numeric or string-length constraints server-side (its SDKs strip them and validate client-side), and recursive schemas are unsupported. Keep schemas flat and explicit. Anthropic notes that lower effort on its newest models can match earlier models at higher effort, so re-tune effort per route with an evaluation when you change models."
+      },
+      "walk": {
+        "why": "Telling the model the exact shape up front is far more reliable than asking for JSON in plain words and hoping.",
+        "wrong": "Overly clever schemas (deep nesting, optional everything) produce answers that are technically valid but useless to the code that reads them.",
+        "example": "A schema with `category` as an enum of six values replaces a free-text field that previously produced 40 different spellings of \"billing\"."
+      },
+      "providers": {
+        "anthropic": "`thinking: { type: \"adaptive\" }`, `output_config: { effort: \"medium\", format: { type: \"json_schema\", schema } }`. Strict tool schemas use `strict: true` on a tool.",
+        "openai": "Responses API: `reasoning: { effort: \"medium\" }` (values are model-dependent) and `text: { format: { type: \"json_schema\", name, schema, strict: true } }`.",
+        "gemini": "Interactions API: `generation_config: { thinking_level: \"medium\" }` and a top-level `response_format` with a JSON schema. The legacy generateContent API uses `thinkingConfig`."
+      }
+    },
+    {
+      "from": "model", "to": "app", "label": "reasoning (hidden)",
+      "title": "The model thinks before it answers",
+      "text": "Reasoning models generate thinking tokens first. You are billed for them, even when you only see a summary or nothing.",
+      "payload": [
+        ["thinking.display", "\"omitted\" (default on newer Claude models)", "Anthropic: thinking happens but its text comes back empty; \"summarized\" returns a readable summary."],
+        ["reasoning tokens", "≈ 900 (illustrative)", "Counted and billed as output tokens."],
+        ["visible answer", "not yet sent", "Thinking comes before the answer, so time-to-first-visible-token grows."]
+      ],
+      "predict": {
+        "question": "The model spends 900 tokens thinking, but your app shows the user none of that thinking. Do you pay for those 900 tokens?",
+        "reveal": "Yes. Reasoning tokens are billed as output tokens whether you see them in full, as a summary or not at all. That is why effort is a cost control, not just a quality control."
+      },
+      "depth": {
+        "beginner": "Before writing the answer, the model works through the problem privately, a bit like jotting notes on scrap paper: which issue matters more, whether a refund was clearly requested. You usually do not see these notes, or you see only a short summary. But they still count as work, and you pay for them like any other words the model writes.",
+        "practitioner": "Reasoning tokens are generated before the visible answer and billed as output tokens. Providers do not return raw reasoning: you can request a summary or receive nothing. Thinking improves results on multi-step or ambiguous problems but adds cost and delays the first visible token. Use lower effort for simple routes and higher effort where measured quality improves.",
+        "expert": "Usage reporting differs: OpenAI reports `usage.output_tokens_details.reasoning_tokens` inside output tokens; Anthropic counts thinking within output tokens; OpenTelemetry's GenAI conventions define `gen_ai.usage.reasoning.output_tokens`. When replaying conversations with newer models, pass reasoning blocks back unchanged as the provider documents; some models reject or drop edited ones."
+      },
+      "walk": {
+        "why": "Working through intermediate steps measurably helps on problems that need several steps of reasoning, such as weighing two complaints or applying a policy.",
+        "wrong": "Leaving effort at maximum everywhere quietly multiplies output costs and latency for tasks that a quick answer would solve equally well.",
+        "example": "Teams often run classification at low effort and contract review at high effort, after testing both on real samples."
+      },
+      "providers": {
+        "anthropic": "Thinking blocks are returned with display `omitted` (empty text) or `summarized`; raw chain of thought is never exposed.",
+        "openai": "Opt in to summaries with `reasoning: { summary: \"auto\" }`; raw reasoning stays opaque. Count in `usage.output_tokens_details.reasoning_tokens`.",
+        "gemini": "Thinking depth is set with `thinking_level`; Google recommends it over the older numeric `thinking_budget` for current models."
+      }
+    },
+    {
+      "from": "model", "to": "app", "label": "JSON answer",
+      "title": "The answer arrives in the exact shape requested",
+      "text": "With structured outputs on, the answer parses as JSON and matches the schema, unless the model stopped early or refused.",
+      "payload": [
+        ["category", "\"billing\"", "From the enum. The model chose billing as the primary issue."],
+        ["priority", "\"high\"", "From the enum: low, normal, high, urgent."],
+        ["refund_requested", "true", "Boolean, not \"yes please\"."],
+        ["refund_amount_gbp", "178", "Wrong: the customer was charged £89 twice and asked for one refund. Schema-valid, still incorrect."],
+        ["stop_reason", "\"end_turn\"", "Finished normally. `max_tokens` or `refusal` would mean the JSON may be incomplete or off-schema."]
+      ],
+      "depth": {
+        "beginner": "The answer comes back as a neatly filled form: category billing, priority high, refund requested yes, and a refund amount. The format is perfect. But look closely: the amount is £178, double what should be refunded. A correctly shaped answer can still contain a wrong value, which is why the next step checks it.",
+        "practitioner": "Structured outputs guarantee syntax and shape: valid JSON, required fields present, enums respected. They do not guarantee truth or business correctness. Always check the stop reason first: an answer cut off by the output limit or a refusal may not match the schema. Then parse into a typed object and run your own validation.",
+        "expert": "Keep field descriptions precise: they guide what goes into each value. On Anthropic's API a new schema adds a one-time compilation delay on first use and is then cached for 24 hours. Log schema-valid-but-rejected outputs: they are your best evaluation data, because they show exactly where the model's reading differs from your rules."
+      },
+      "walk": {
+        "why": "Guaranteed shape removes a whole class of failures: crashes from malformed JSON, missing keys and invented categories.",
+        "wrong": "Treating schema-valid output as correct output. A refund of the wrong amount passes any JSON Schema.",
+        "example": "An invoice extractor returns perfectly structured totals that are occasionally the subtotal instead of the total; only a business-rule check catches it."
+      }
+    },
+    {
+      "from": "app", "to": "guard", "label": "validate",
+      "title": "Code checks the rules the schema can't express",
+      "text": "The validator re-checks the schema and applies business rules using trusted data from the order system.",
+      "payload": [
+        ["schema check", "pass", "Shape is correct (belt and braces: never skip this, even with strict modes)."],
+        ["rule: refund ≤ order total", "fail: 178 > 89", "Business rule using the real order amount from your own systems."],
+        ["rule: priority vs tier", "pass", "Standard tier, billing issue: high is allowed."],
+        ["result", "reject with reasons", "A specific error message is what makes a retry useful."]
+      ],
+      "depth": {
+        "beginner": "Your own code now double-checks the form using facts it trusts. It looks up the real order and sees the customer paid £89, so a £178 refund is wrong. The check fails, and instead of sending a wrong ticket onward, the app notes exactly what was wrong so it can ask the AI to fix it.",
+        "practitioner": "Validation has two layers: structure (parse and schema) and semantics (business rules). Semantic checks should use trusted data from your systems, never values the model claims. Return precise, actionable errors, such as which field and which rule, because vague errors produce vague fixes.",
+        "expert": "Make validators pure and testable, and version them with the schema. Distinguish errors the model can fix (wrong amount, missing reason) from ones it cannot (order not found), and route the latter to a human instead of retrying. Count rejections by rule to find prompt or schema problems."
+      },
+      "walk": {
+        "why": "Models are probabilistic; rules are not. Putting hard rules in code keeps decisions consistent and auditable.",
+        "wrong": "Letting the model check its own work in the same request: it tends to agree with itself.",
+        "example": "Refund automation that caps amounts at the order total in code, regardless of what the AI proposes, is a common safeguard."
+      }
+    },
+    {
+      "from": "app", "to": "model", "label": "retry with feedback",
+      "title": "One bounded retry with the exact error",
+      "text": "The app sends the error back once. If the second answer also fails, it goes to a person.",
+      "payload": [
+        ["feedback", "\"refund_amount_gbp must not exceed order total 89\"", "Specific, factual and short."],
+        ["attempt", "2 of 2", "A hard cap: never loop until it passes."],
+        ["fallback", "human review queue", "What happens when the retry also fails."]
+      ],
+      "predict": {
+        "question": "Should the app keep retrying until the model produces a valid refund amount?",
+        "reveal": "No. Cap retries (often one or two). Unlimited retries waste money and can eventually produce a valid-looking but wrong answer by chance. After the cap, hand the case to a person."
+      },
+      "depth": {
+        "beginner": "The app gives the AI one more try, telling it exactly what was wrong: the refund cannot be more than £89. If the second answer still breaks a rule, the app stops and passes the email to a human. A firm limit on retries keeps costs predictable and avoids accepting an answer just because it finally slipped through.",
+        "practitioner": "Feed the validator's error back as a new message and request the same schema again. A specific error gives the model what it needs to correct the value. Cap attempts, track how often retries happen per rule, and escalate after the cap. A high retry rate on one rule usually means the schema descriptions or instructions need work.",
+        "expert": "Retries multiply cost and latency, so measure cost per accepted output, not per call. For high-stakes fields, consider having code compute the value instead of the model, for example deriving the refund amount from order data and asking the model only whether a refund is warranted."
+      },
+      "walk": {
+        "why": "A precise error turns a wrong answer into a right one cheaply most of the time, without a human.",
+        "wrong": "Silent retries without a cap or logging hide quality problems and inflate bills.",
+        "example": "Many extraction pipelines allow exactly one retry with the validation error, then route failures to a review queue."
+      }
+    },
+    {
+      "from": "model", "to": "app", "label": "corrected JSON",
+      "title": "The corrected answer passes validation",
+      "text": "The second answer fixes the amount and passes every rule.",
+      "payload": [
+        ["refund_amount_gbp", "89", "Matches the duplicate charge."],
+        ["category", "\"billing\"", "Unchanged."],
+        ["secondary_issue", "\"app crash on checkout\"", "Captured separately so it is not lost."],
+        ["validation", "pass", "Now safe to act on."]
+      ],
+      "depth": {
+        "beginner": "The AI returns a corrected form: a refund of £89, the billing category, and a separate note about the app crashing so that problem is not forgotten. This time every check passes, so the app can safely use it.",
+        "practitioner": "Re-run the full validation on the retried answer; never assume the retry fixed only the reported field. Keep both attempts in the log with the validator's decision, which gives you labelled examples for evaluating prompts, schemas and effort levels later.",
+        "expert": "Consider schema evolution: adding a `secondary_issue` field after observing multi-issue emails is cheaper than prompting harder. Version schemas and record which version produced each record, so downstream analytics can handle old and new shapes."
+      },
+      "walk": {
+        "why": "Re-validating every answer keeps the guarantee simple: nothing unvalidated ever reaches other systems.",
+        "wrong": "Only checking the field that failed last time lets new errors slip through on the retry.",
+        "example": "Data teams often discover a missing field by reading rejected or corrected outputs, then add it to the schema."
+      }
+    },
+    {
+      "from": "app", "to": "crm", "label": "create ticket",
+      "title": "Only validated data reaches the ticket system",
+      "text": "The ticket is created from the validated object, with the reasoning summary and usage logged for review.",
+      "payload": [
+        ["ticket", "{ category: billing, priority: high, refund: 89 }", "Created from the typed, validated object."],
+        ["usage", "≈ 1,100 output tokens incl. reasoning (illustrative)", "Logged per request to track cost of thinking."],
+        ["audit", "schema v3 · 2 attempts · validator rules passed", "Enough to explain the decision later."]
+      ],
+      "depth": {
+        "beginner": "Only now does the ticket get created, using the checked information. The app also records how much work the AI did and how many tries it took, so the team can see costs and spot problems. If anyone later asks why this ticket was marked high priority, there is a clear record.",
+        "practitioner": "Act only on validated, typed data. Log the schema version, number of attempts, validator results and token usage including reasoning. This combination of structured outputs plus validation plus logging is the pattern for any AI step whose output feeds other software.",
+        "expert": "Downstream systems should still validate input as they would from any untrusted client. Use the logged data to tune effort per route: if low effort passes validation as often as medium on this task, the savings are free. Revisit when models change, since defaults and behaviour shift between generations."
+      },
+      "walk": {
+        "why": "Treating the model like any other untrusted input source, validated at the boundary, is what makes AI safe to wire into real systems.",
+        "wrong": "Writing model output straight into databases or ticketing APIs lets a single bad answer corrupt records.",
+        "example": "AI-assisted data entry systems typically hold anything that fails validation in a review queue instead of saving it."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Understand what reasoning models really do, what thinking costs, and how to get answers your code can trust.",
+    "thirtySeconds": [
+      "Reasoning models write hidden working notes before answering; you pay for those notes as output tokens even when you don't see them.",
+      "An effort setting controls how much they think, trading quality against cost and speed.",
+      "Structured outputs force answers into a JSON Schema, but only your own validation can check that the values are right."
+    ],
+    "whyItMatters": "Most useful AI features end with code acting on the model's answer: creating a ticket, approving a refund, routing an alert. That requires answers in a reliable shape and with correct values. Reasoning improves hard decisions but costs money and time; structured outputs remove formatting failures but not logical ones. Knowing exactly what each guarantees prevents both overspending and silent errors.",
+    "analogy": "Think of a careful clerk filling in an official form. Thinking time is the clerk's scratch paper: it helps with tricky cases, you pay for the time, and you rarely see it. The form is the schema: it guarantees every box is filled in the right format. Your supervisor's check against the real records is validation: it catches a neatly written wrong number.",
+    "audience": "Developers building AI features that feed other systems, and product owners deciding where to spend on model quality.",
+    "minutes": 16,
+    "prerequisites": ["llm-call", "tool-use"],
+    "deepDives": [
+      {
+        "title": "What reasoning tokens are",
+        "body": "Reasoning models generate intermediate tokens before the visible answer. They help on problems with several steps, competing constraints or ambiguity.\n\nProviders do not return the raw reasoning; you get a summary or nothing. The tokens are still billed as output and still take up room in the context window, so effort settings are a real cost control."
+      },
+      {
+        "title": "What a JSON Schema can and cannot promise",
+        "body": "A schema can require fields, fix types, restrict values to a list with `enum`, and forbid extra properties. Structured output features enforce that shape during generation.\n\nA schema cannot know your order totals, refund policy or customer tier. Those rules belong in code that runs after the model, using data you trust."
+      },
+      {
+        "title": "Choosing effort",
+        "body": "Higher effort usually means better answers on hard tasks and more tokens and latency everywhere. Simple classification often does as well at low effort.\n\nPick effort per route by testing on real examples, and re-test when you change models, since defaults and calibration differ between model generations."
+      }
+    ],
+    "production": [
+      {
+        "title": "Invisible reasoning costs",
+        "body": "Hidden thinking is billed as output. Track reasoning tokens per route; a route left at maximum effort can dominate the bill without anyone noticing."
+      },
+      {
+        "title": "Schema-valid but wrong",
+        "body": "Structured outputs stop malformed JSON, not wrong values. Validate business rules in code with trusted data before acting."
+      },
+      {
+        "title": "Truncation and refusals",
+        "body": "If the answer stops on the output limit or a refusal, it may not match the schema. Check the stop reason before parsing and handle each case explicitly."
+      },
+      {
+        "title": "Unbounded retries",
+        "body": "Retry once or twice with the exact validation error, then escalate. Unlimited retries waste money and can eventually accept a lucky wrong answer."
+      }
+    ],
+    "lab": {
+      "title": "Validate structured output and retry once",
+      "intro": "Build the validator and retry loop from this lesson: schema checks, business rules using trusted order data, precise error messages, one retry with feedback, and escalation to a human. A scripted model makes it run offline.",
+      "dir": "labs/reasoning-structured"
+    },
+    "takeaways": [
+      "Reasoning tokens improve hard decisions and are billed as output even when hidden.",
+      "Effort is a cost and latency control as much as a quality control; tune it per route.",
+      "Structured outputs guarantee shape, not correctness.",
+      "Validate business rules in code with trusted data, then retry once with a precise error.",
+      "Act only on validated output and log attempts, schema version and usage."
+    ],
+    "faq": [
+      { "q": "Can I see the model's reasoning?", "a": "Not in raw form. Current providers return a summary if you ask for one, or nothing. Do not build features that depend on reading the raw reasoning." },
+      { "q": "Do I still need validation if I use strict structured outputs?", "a": "Yes. Strict modes guarantee the shape of the JSON, not that the values follow your business rules. Validate against trusted data before acting." },
+      { "q": "Is higher effort always better?", "a": "No. It costs more and is slower. Many simple tasks perform the same at low effort. Test on real examples and choose per route." },
+      { "q": "What happens if the model refuses or runs out of tokens?", "a": "The output may be incomplete or not match the schema. Check the stop reason or status first and handle refusals and truncation as separate cases." }
+    ],
+    "related": ["tool-use", "evals", "cost-latency", "human-in-loop"]
+  },
+  "quiz": [
+    {
+      "q": "Your app hides the model's reasoning completely. Are reasoning tokens still billed?",
+      "options": ["No, hidden tokens are free", "Yes, as output tokens", "Only if you request a summary", "Only on high effort"],
+      "answer": 1,
+      "explain": "Reasoning happens and is billed regardless of whether you see it, a summary of it or nothing."
+    },
+    {
+      "q": "A schema-valid answer proposes a refund larger than the order total. What should catch this?",
+      "options": ["The JSON Schema", "Strict mode", "A business-rule check in your code using trusted order data", "A higher effort setting"],
+      "answer": 2,
+      "explain": "Schemas check shape, not facts. Business rules belong in code that compares against data you trust."
+    },
+    {
+      "q": "What is a sensible retry policy for an invalid structured answer?",
+      "options": ["Retry until it passes", "Never retry", "Retry once or twice with the exact error, then escalate", "Retry with higher temperature"],
+      "answer": 2,
+      "explain": "A capped retry with a precise error fixes most problems cheaply; anything still failing goes to a person."
+    },
+    {
+      "q": "The response stopped because it hit the output limit. What should you assume?",
+      "options": ["The JSON is complete", "The JSON may be incomplete or off-schema", "The model refused", "The cache expired"],
+      "answer": 1,
+      "explain": "Truncated output can break the schema guarantee. Check the stop reason or status before parsing."
+    }
+  ]
+}

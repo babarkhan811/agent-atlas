@@ -6,185 +6,307 @@
   "category": "Agents",
   "title": "The agent loop",
   "summary": "An agent is a model calling tools in a loop until the goal is done or a limit is hit.",
+  "seoTitle": "The AI agent loop explained: think, act, observe, repeat",
+  "seoDescription": "Watch an AI agent turn a goal into tool calls: the think-act-observe loop, how it decides it is done, and the budgets that stop it running away.",
+  "objectives": [
+    "Explain how an agent differs from a single model call and from a fixed workflow.",
+    "Trace the think, act, observe cycle and the signal that ends it.",
+    "Set step, token and action budgets so a confused agent stops safely."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    { "title": "Anthropic: Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" },
+    { "title": "Anthropic: How to implement tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use" },
+    { "title": "OpenAI: Function calling guide", "url": "https://developers.openai.com/api/docs/guides/function-calling" },
+    { "title": "Yao et al. (2022): ReAct, Synergizing Reasoning and Acting in Language Models", "url": "https://arxiv.org/abs/2210.03629" }
+  ],
   "nodes": [
-    {
-      "id": "user",
-      "label": "You",
-      "kind": "user",
-      "x": 9,
-      "y": 50
-    },
-    {
-      "id": "agent",
-      "label": "Agent runtime",
-      "kind": "app",
-      "x": 38,
-      "y": 50
-    },
-    {
-      "id": "model",
-      "label": "Model",
-      "kind": "model",
-      "x": 70,
-      "y": 18
-    },
-    {
-      "id": "issues",
-      "label": "Issue tracker",
-      "kind": "tool",
-      "x": 90,
-      "y": 55
-    },
-    {
-      "id": "files",
-      "label": "File system",
-      "kind": "data",
-      "x": 66,
-      "y": 85
-    }
+    { "id": "user", "label": "You", "kind": "user", "x": 9, "y": 50 },
+    { "id": "agent", "label": "Agent runtime", "kind": "app", "x": 38, "y": 50 },
+    { "id": "model", "label": "Model", "kind": "model", "x": 70, "y": 18 },
+    { "id": "issues", "label": "Issue tracker", "kind": "tool", "x": 90, "y": 55 },
+    { "id": "files", "label": "File system", "kind": "data", "x": 66, "y": 85 }
   ],
   "steps": [
     {
-      "from": "user",
-      "to": "agent",
-      "label": "goal",
+      "from": "user", "to": "agent", "label": "goal",
       "title": "You give a goal, not steps",
       "text": "With a plain chatbot you drive. With an agent you state the outcome and the model works out the steps.",
       "payload": [
-        [
-          "goal",
-          "\"Summarise this week's open bugs into report.md\"",
-          ""
-        ],
-        [
-          "max_iterations",
-          "15",
-          "A hard stop so a confused agent can't loop forever."
-        ]
-      ]
+        ["goal", "\"Summarise this week's open bugs into report.md\"", "An outcome to reach, not a list of instructions."],
+        ["max_turns", "15", "A hard stop so a confused agent cannot loop forever."],
+        ["token_budget", "60,000 tokens", "Illustrative cap on total spend for this task."],
+        ["tools", "list_issues, read_issue, write_file", "The only actions this agent may take for this goal."]
+      ],
+      "depth": {
+        "beginner": "With an ordinary chatbot you lead: you ask, it answers, you ask again. With an agent you describe what you want done, here a report of this week's open bugs, and the agent works out the steps itself. You also set limits up front: how many rounds it may take, how much it may spend, and which tools it may use. Those limits matter as much as the goal.",
+        "practitioner": "The agent runtime is ordinary code that holds the goal, the tool list and the budgets, then drives repeated model calls. A useful definition: workflows follow code paths you wrote; agents let the model decide which tool to call next and when to stop. Give the agent only the tools this goal needs and set explicit stop conditions before the first call.",
+        "expert": "Budgets belong in the runtime, not the prompt: maximum turns, total tokens, wall-clock time and per-tool action limits. Record the goal, the tool set and the policy version in the trace so runs can be compared later. For tasks with clear steps, a deterministic workflow is cheaper and more predictable; reach for an agent when the path genuinely cannot be known in advance."
+      },
+      "walk": {
+        "why": "Handing the model the goal lets it adapt when results surprise it, which a fixed script cannot do.",
+        "wrong": "Agents without limits can loop, repeat the same tool call, or burn through a large token budget on a small task.",
+        "example": "A coding assistant asked to \"fix the failing test\" decides for itself which files to read, what to change and when to re-run the tests."
+      }
     },
     {
-      "from": "agent",
-      "to": "model",
-      "label": "turn 1",
+      "from": "agent", "to": "model", "label": "turn 1",
       "title": "Turn 1: think, then act",
       "text": "The runtime sends the goal and the tool list. The model reasons about what it needs first.",
       "payload": [
-        [
-          "tools",
-          "list_issues, read_issue, write_file",
-          ""
-        ],
-        [
-          "context",
-          "≈ 1.2k tokens",
-          "Small now; it grows every turn."
-        ]
-      ]
+        ["system", "\"You are a triage assistant. Use tools; finish with a short summary.\"", "Standing instructions for the whole run."],
+        ["tools", "3 definitions with JSON Schemas", "Same format as in the Tool use lesson."],
+        ["messages", "[{ role: \"user\", content: \"Summarise this week's…\" }]", "Just the goal so far."],
+        ["context", "≈ 1.2k tokens", "Illustrative. Small now; it grows every turn."]
+      ],
+      "depth": {
+        "beginner": "The agent sends the goal and the list of available tools to the model. The model does not do everything at once. It thinks about the very first thing it needs, much like a person who has been asked for a bug report would first open the bug tracker to see what is there.",
+        "practitioner": "Each turn is one ordinary model request: system prompt, tool definitions and the conversation so far. The model may write some reasoning text before choosing a tool, and reasoning-capable models may think internally first. This think-then-act pattern is often called ReAct, after a 2022 research paper that interleaved reasoning traces with actions.",
+        "expert": "Keep the system prompt and tool definitions byte-stable across turns so provider prompt caching can reuse them; only the growing message list should change. Give the model a clear definition of done in the system prompt. Avoid stuffing the first turn with every document you might need; let the agent fetch what it needs, which keeps early turns cheap."
+      },
+      "walk": {
+        "why": "Starting with one small action keeps the agent grounded in real data instead of planning from guesses.",
+        "wrong": "A vague goal or a missing definition of done leads to agents that stop too early or never stop.",
+        "example": "An agent asked to update a spreadsheet usually starts by reading the spreadsheet, not by writing to it."
+      }
     },
     {
-      "from": "model",
-      "to": "agent",
-      "label": "tool_use",
+      "from": "model", "to": "agent", "label": "tool_use",
       "title": "The model picks a tool",
       "text": "It chooses list_issues with a filter. The runtime runs it.",
       "payload": [
-        [
-          "call",
-          "list_issues({ state: \"open\", label: \"bug\", since: \"7d\" })",
-          ""
-        ]
-      ]
+        ["stop_reason", "\"tool_use\"", "The model wants a tool run before it continues."],
+        ["name", "\"list_issues\"", "The tool it chose."],
+        ["input", "{ state: \"open\", label: \"bug\", since: \"7d\" }", "Arguments the model filled in from the goal."]
+      ],
+      "depth": {
+        "beginner": "The model replies with a request rather than an answer: \"please list open bugs from the last seven days\". It cannot touch the bug tracker itself. Exactly as in the tool use lesson, it only asks, and the agent's code decides whether and how to carry out the request.",
+        "practitioner": "The response ends with `stop_reason: \"tool_use\"` and contains a tool request with a name and input. The runtime validates the input against the tool's schema, checks it is allowed, and runs it. This step is identical to single tool use; what makes an agent is that the runtime keeps going after the result comes back.",
+        "expert": "Apply policy per call, not per run: the same agent might be allowed to list issues freely but need approval to close one. Detect repeats cheaply by hashing tool name plus normalised input; an agent calling the same thing with the same arguments three times is usually stuck and should be interrupted or nudged."
+      },
+      "walk": {
+        "why": "Choosing tools from the goal is the reasoning step that a fixed script cannot do.",
+        "wrong": "The model can pick a plausible but wrong filter, such as the wrong date range, and every later step inherits the mistake.",
+        "example": "A research agent asked about last quarter's sales may first call a date helper to work out which months \"last quarter\" means."
+      },
+      "providers": {
+        "anthropic": "The loop continues while `stop_reason` is `tool_use`; it ends on `end_turn`.",
+        "openai": "Responses API: the loop continues while the output contains `function_call` items; you send `function_call_output` items back.",
+        "gemini": "Interactions API: `function_call` steps are answered with `function_result` steps until the model returns a final text answer."
+      }
     },
     {
-      "from": "agent",
-      "to": "issues",
-      "label": "list_issues",
+      "from": "agent", "to": "issues", "label": "list_issues",
+      "title": "Act",
+      "text": "The runtime calls the issue tracker's API with the model's arguments.",
+      "payload": [
+        ["request", "GET /issues?state=open&label=bug&since=7d", "A normal API call made by the runtime."],
+        ["auth", "service token (read-only)", "Scoped so this agent can read issues but not change them."]
+      ],
+      "depth": {
+        "beginner": "The agent's code now carries out the request and asks the bug tracker for the list. It uses its own login, which here only allows reading. Even if the model asked to delete bugs, this login could not do it. Giving each agent the smallest set of permissions is one of the most important safety habits.",
+        "practitioner": "Execution is plain code: an HTTP call with a scoped credential, a timeout and error handling. Read-only credentials for read-only tasks remove a whole class of accidents. Log the call with its arguments and result size so the run can be audited and replayed.",
+        "expert": "Make side-effecting tools idempotent and require approval for destructive ones. Put rate limits on each tool so an agent stuck in a loop cannot hammer a production API. Results can contain attacker-controlled text, such as an issue title written by an outsider, so they must be treated as untrusted data later."
+      },
+      "walk": {
+        "why": "Keeping actions in ordinary code means permissions, logging and limits work exactly as they do for any other service.",
+        "wrong": "Agents given broad admin tokens turn small reasoning mistakes into large changes.",
+        "example": "Many teams create a separate service account per agent so its actions are easy to spot in audit logs."
+      }
+    },
+    {
+      "from": "issues", "to": "agent", "label": "12 issues",
       "title": "Observe",
-      "text": "The result is appended to the conversation. This think → act → observe cycle is often called ReAct.",
+      "text": "The result comes back and is appended to the conversation. This think, act, observe cycle is the agent loop.",
       "payload": [
-        [
-          "result",
-          "12 issues · #481 login timeout · #477 CSV export blank · …",
-          ""
-        ]
-      ]
+        ["result", "12 issues · #481 login timeout · #477 CSV export blank · …", "Plain data the model will read next turn."],
+        ["size", "≈ 2.5k tokens", "Illustrative. Results cost tokens on every later turn."]
+      ],
+      "depth": {
+        "beginner": "The bug tracker sends back twelve open bugs. The agent adds this list to the conversation so the model can see it next time. That cycle of think, act, then look at the result is the heart of every AI agent, and it repeats until the job is done.",
+        "practitioner": "The result goes back as a tool result tied to the request ID. Trim it before sending: titles, IDs and priorities may be enough, and full issue bodies can be fetched later only for the issues that matter. Every token here is re-sent on every later turn, so large results compound cost.",
+        "expert": "For long runs, plan context management: summarise or clear old tool results once they have been used, keep durable notes in a scratch file, and cap result sizes per tool. Errors should come back as error results the model can react to, not as exceptions that kill the run."
+      },
+      "walk": {
+        "why": "Seeing real results lets the model correct course, for example by narrowing a search that returned too much.",
+        "wrong": "Huge raw results crowd the context, slow every turn and can bury the detail the model needed.",
+        "example": "A log-search agent that gets 10,000 lines back usually does better if the tool returns counts and a sample, with a follow-up tool for details."
+      }
     },
     {
-      "from": "issues",
-      "to": "agent",
-      "label": "12 issues",
+      "from": "agent", "to": "model", "label": "turns 2–5",
       "title": "The loop continues",
-      "text": "The model sees the list, decides it needs detail on the three highest-priority bugs, and requests read_issue three times. Several independent calls can run in parallel.",
+      "text": "The model reads the list, asks to read the three most serious bugs, and reads their details. Independent calls can run in parallel.",
       "payload": [
-        [
-          "turn",
-          "2 → 4",
-          ""
-        ],
-        [
-          "context",
-          "≈ 9.8k tokens",
-          "Every result makes the next call bigger and pricier."
-        ]
-      ]
+        ["turn", "2 → 5", "Several rounds of request, tool call and result."],
+        ["parallel calls", "read_issue(#481), read_issue(#477), read_issue(#470)", "Three independent reads requested in one turn and returned together."],
+        ["context", "≈ 9.8k tokens", "Illustrative. Every result makes the next call bigger and pricier."],
+        ["turns used", "5 of 15", "The runtime counts against the budget on every turn."]
+      ],
+      "depth": {
+        "beginner": "The model now looks at the list and decides the three most serious bugs deserve a closer look, so it asks to read all three. The agent fetches them and hands them back. This repeats for a few rounds. Each round the conversation gets longer, because everything seen so far is sent again.",
+        "practitioner": "Multiple tool requests in one response are common; run independent ones concurrently and return all results in one message. Track turns, tokens and elapsed time against the budgets on every iteration. If the agent approaches a limit, it can be told so it can wrap up rather than being cut off mid-task.",
+        "expert": "Watch for loop pathologies: repeating identical calls, alternating between two tools without progress, or re-reading the same data. Simple counters catch most of them. Some providers offer budget hints the model can see, which lets it pace itself; whatever the model sees, the runtime must still enforce the hard limits."
+      },
+      "walk": {
+        "why": "Several short rounds let the agent go deeper only where it matters instead of reading everything up front.",
+        "wrong": "Context grows with every turn, so long runs get slower and more expensive, and early instructions can get lost in the noise.",
+        "example": "A research agent typically searches, skims results, then opens only the two or three most relevant sources."
+      }
     },
     {
-      "from": "agent",
-      "to": "files",
-      "label": "write_file",
+      "from": "agent", "to": "files", "label": "write_file",
       "title": "Produce the deliverable",
       "text": "Once it has enough, the model asks to write the report. Writing is an action with side effects, so many runtimes ask for confirmation here.",
       "payload": [
-        [
-          "path",
-          "\"report.md\"",
-          ""
-        ],
-        [
-          "content",
-          "\"## Open bugs (12)\\n1. Login timeout…\"",
-          ""
-        ]
-      ]
+        ["path", "\"report.md\"", "Restricted to the agent's working folder."],
+        ["content", "\"## Open bugs (12)\\n1. Login timeout…\"", "The model's draft, written by the runtime."],
+        ["policy", "write allowed in ./workspace only", "Paths outside the folder are rejected before anything is written."]
+      ],
+      "depth": {
+        "beginner": "When the model feels it has enough information, it asks to save the report as a file. Saving a file changes something in the world, unlike reading, so the agent's code checks the request carefully: the file must go inside the agent's own folder. Some setups would also ask a person before saving.",
+        "practitioner": "Writes are side effects, so validate the path against an allow-listed directory, refuse path tricks like `../`, and consider a confirmation step. Keep the written content in the trace. If the write fails, return an error result so the model can fix the path or report the problem.",
+        "expert": "Classify tools by risk: read-only, reversible and destructive. Writes inside a sandboxed workspace are usually reversible and can run automatically; writes to shared systems, emails or payments should require approval. Content written by the model can carry data from untrusted sources, so review before it leaves the sandbox."
+      },
+      "walk": {
+        "why": "Producing a concrete artifact makes the result checkable, which is easier to trust than a chat reply.",
+        "wrong": "Unchecked paths let an agent overwrite the wrong file; unreviewed output can leak data copied from earlier tool results.",
+        "example": "Coding agents usually work on a branch and open a pull request instead of pushing straight to the main branch."
+      }
     },
     {
-      "from": "agent",
-      "to": "model",
-      "label": "turn 6",
+      "from": "model", "to": "agent", "label": "end_turn",
       "title": "Check if done",
       "text": "After the write succeeds the model reviews the goal and replies with text instead of a tool call. That's the signal to stop.",
       "payload": [
-        [
-          "stop_reason",
-          "\"end_turn\"",
-          "Text with no tool call ends the loop."
-        ],
-        [
-          "turns used",
-          "6 of 15",
-          ""
-        ]
-      ]
+        ["stop_reason", "\"end_turn\"", "Text with no tool call ends the loop."],
+        ["text", "\"Wrote report.md: 12 open bugs, 3 summarised in detail.\"", "The agent's final summary for the user."],
+        ["turns used", "6 of 15", "Finished well inside the budget."]
+      ],
+      "depth": {
+        "beginner": "After the file is saved, the model checks its work against the original goal and decides it is finished. It signals this by replying with a short summary instead of asking for another tool. The agent's code sees that signal and stops the loop.",
+        "practitioner": "The loop ends when the model returns a final answer without tool requests (`end_turn` in Anthropic's format). It can also end because a budget ran out, a tool needs human approval, or an error is unrecoverable; record which one happened. Do not treat a budget stop as success.",
+        "expert": "Add a verification step for important work: re-read the written file, run tests, or ask a second model call to check the output against the goal. Distinguish \"model says done\" from \"task is done\"; evaluations should check the artifact itself, not the agent's claim."
+      },
+      "walk": {
+        "why": "A clear stop signal plus hard limits gives two independent ways for the run to end.",
+        "wrong": "Models sometimes declare success too early, or claim they did something they did not; trust the artifact, not the summary.",
+        "example": "A test-fixing agent is judged done when the test suite passes, not when it says \"fixed\"."
+      }
     },
     {
-      "from": "agent",
-      "to": "user",
-      "label": "done",
+      "from": "agent", "to": "user", "label": "done",
       "title": "Report ready",
       "text": "Real agents add retries, timeouts, cost budgets and logging around this same simple loop.",
       "payload": [
-        [
-          "output",
-          "report.md (12 bugs, 3 detailed)",
-          ""
-        ],
-        [
-          "cost",
-          "≈ 41k tokens total",
-          "Loops get expensive; budgets matter."
-        ]
-      ]
+        ["output", "report.md (12 bugs, 3 detailed)", "The deliverable."],
+        ["cost", "≈ 41k tokens total", "Illustrative. Several turns of a growing conversation add up."],
+        ["trace", "6 turns · 5 tool calls · 0 errors", "Kept for debugging and evaluation."]
+      ],
+      "depth": {
+        "beginner": "You get the report and a short note about what the agent did. Behind the scenes, it made several model calls and a handful of tool calls. That is the whole idea of an agent: the same request-and-tool cycle, repeated with judgement about what to do next, inside limits that keep it safe and affordable.",
+        "practitioner": "Report the result, the stop reason and the cost. Keep the full trace of model calls and tool calls; it is how you debug wrong answers and build evaluations. Many products show users the tool steps the agent took so they can judge the result.",
+        "expert": "Over many runs, measure success rate, turns per task, tokens per task and tool error rates. These numbers tell you whether to simplify the tools, tighten instructions, switch models or replace the agent with a fixed workflow for common cases."
+      },
+      "walk": {
+        "why": "A visible trace turns an opaque AI result into something people can check and trust.",
+        "wrong": "Without traces and cost tracking, a slow, expensive or wrong agent is hard to diagnose.",
+        "example": "Agent platforms commonly show a step-by-step activity log next to the final answer for exactly this reason."
+      },
+      "predict": {
+        "question": "This run took 6 turns. Why does a 6-turn run usually cost far more than 6 times a single short request?",
+        "reveal": "Because every turn re-sends the whole conversation, including all earlier tool results. Later turns carry much more input than the first, so cost grows faster than the number of turns."
+      }
+    }
+  ],
+  "article": {
+    "promise": "See exactly what makes an AI agent different from a chatbot: a loop of tool calls guided by the model, with limits that keep it safe and affordable.",
+    "thirtySeconds": [
+      "An agent is ordinary code that repeatedly calls a model, runs the tools it asks for, and feeds the results back.",
+      "The loop is think, act, observe; it ends when the model replies without a tool request or a budget runs out.",
+      "Hard limits on turns, tokens and actions belong in your code, because a confused model will not always stop itself."
+    ],
+    "whyItMatters": "Agents are behind coding assistants, research assistants and the security automation later in this course. Once you see that an agent is simply a loop around the tool-use cycle, you can reason about its cost, its failure modes and where to put safety checks. You also learn when not to build one: if the steps are known in advance, a fixed workflow is cheaper, faster and easier to test.",
+    "analogy": "Think of a junior colleague given an errand list with a budget. They decide where to go first, report back what they found, decide the next stop, and come back when the job is done or the money runs out. You set the budget and which shops they may visit.",
+    "audience": "Developers building their first agent, product managers deciding between workflows and agents, and anyone who wants to know what \"agentic\" actually means.",
+    "minutes": 14,
+    "prerequisites": ["llm-call", "tool-use"],
+    "deepDives": [
+      {
+        "title": "Workflows versus agents",
+        "body": "A workflow follows code paths you designed: step one, then step two, maybe a branch. An agent lets the model choose the next step and decide when it is finished.\n\nWorkflows are predictable and cheap; agents handle open-ended tasks where the path cannot be known in advance. Many good systems are mostly workflow with one agentic step where judgement is genuinely needed."
+      },
+      {
+        "title": "Stop conditions",
+        "body": "A healthy loop has several independent ways to end: the model returns a final answer, a turn or token budget is reached, a tool requires human approval, or an unrecoverable error occurs.\n\nLog which one happened. A run that ended on a budget is not a success, even if the model wrote a confident summary."
+      },
+      {
+        "title": "Context grows every turn",
+        "body": "Because the model is stateless, each turn re-sends the system prompt, tool definitions and every earlier message and result. Turn ten can carry many times more tokens than turn one.\n\nTrim tool results, clear or summarise old ones once used, and keep stable content first so prompt caching can reuse it. The memory and context-caching lessons go deeper."
+      }
+    ],
+    "production": [
+      {
+        "title": "Runaway loops",
+        "body": "Agents can repeat the same call or bounce between two tools without progress. Enforce maximum turns and tokens in code, and detect repeated identical calls."
+      },
+      {
+        "title": "Over-broad permissions",
+        "body": "An agent's mistakes are limited by its credentials. Use scoped, per-agent service accounts and require approval for destructive actions."
+      },
+      {
+        "title": "False claims of success",
+        "body": "Models sometimes report work they did not do. Verify the artifact with tests, checks or a review step instead of trusting the final message."
+      },
+      {
+        "title": "Untrusted tool results",
+        "body": "Issue titles, web pages and emails can carry instructions aimed at the model. Treat every tool result as data; the prompt-injection lesson shows the attack and defences."
+      }
+    ],
+    "lab": {
+      "title": "An agent loop with budgets and loop detection",
+      "intro": "Build the runtime from this lesson: it drives a scripted model through tool calls, enforces turn and token budgets, detects an agent repeating the same call, and reports why the run stopped. Runs offline; swap in a real model client later.",
+      "dir": "labs/agent-loop"
+    },
+    "takeaways": [
+      "An agent is a loop: model call, tool call, result, repeat.",
+      "The model ends the loop by replying without a tool request; your code ends it when a budget runs out.",
+      "Every turn re-sends the growing conversation, so cost grows faster than the number of turns.",
+      "Scope tools and credentials per agent, and gate destructive actions behind approval.",
+      "Use a fixed workflow when the steps are known; use an agent when they are not."
+    ],
+    "faq": [
+      { "q": "What makes something an AI agent rather than a chatbot?", "a": "An agent chooses and calls tools in a loop to reach a goal, deciding its own next step and when it is done. A chatbot answers one message at a time while you drive." },
+      { "q": "How does an agent know when to stop?", "a": "The model signals it by replying with a final answer instead of a tool request. Your code should also stop it on turn, token or time limits, and when an action needs human approval." },
+      { "q": "Are agents always better than workflows?", "a": "No. For tasks with known steps, a workflow is cheaper, faster and more predictable. Agents earn their cost on open-ended tasks where the path cannot be planned in advance." },
+      { "q": "What is ReAct?", "a": "ReAct is a 2022 research approach in which a model alternates between reasoning about a task and taking actions, then uses each observation to decide the next step. Most modern agent loops follow the same think, act, observe pattern." }
+    ],
+    "related": ["tool-use", "prompt-injection", "workflow", "evals"]
+  },
+  "quiz": [
+    {
+      "q": "What usually signals that the model has finished an agent run?",
+      "options": ["It returns an empty response", "It replies with text and no tool request", "The tool returns an error", "The context window is full"],
+      "answer": 1,
+      "explain": "A final text answer with no tool request (`end_turn` in Anthropic's format) is the model's signal that it is done."
+    },
+    {
+      "q": "Where should the maximum number of turns be enforced?",
+      "options": ["In the system prompt only", "In the runtime code", "In the tool descriptions", "Nowhere; the model stops itself"],
+      "answer": 1,
+      "explain": "Prompts can be ignored or forgotten. A hard limit in code always applies, even when the model is confused."
+    },
+    {
+      "q": "Why do later turns in an agent run cost more than early ones?",
+      "options": ["Providers charge more per turn", "The whole growing conversation is re-sent each turn", "Tools get slower", "The model thinks harder later"],
+      "answer": 1,
+      "explain": "Each turn re-sends all earlier messages and tool results, so input grows with every round."
+    },
+    {
+      "q": "A task always follows the same five steps. What should you build?",
+      "options": ["A multi-agent system", "An agent with all tools enabled", "A fixed workflow", "A larger model"],
+      "answer": 2,
+      "explain": "Known steps suit a workflow: it is cheaper, faster and easier to test than letting a model choose each step."
     }
   ]
 }

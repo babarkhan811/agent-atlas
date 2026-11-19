@@ -1,0 +1,307 @@
+{
+  "id": "observability",
+  "path": "reliable-agents",
+  "order": 7,
+  "tier": "pro",
+  "category": "Production",
+  "title": "Observability and tracing for agents",
+  "summary": "Record every model call and tool call of an agent run as a trace, so you can see what happened, what it cost and why it went wrong.",
+  "seoTitle": "Observability and tracing for AI agents with OpenTelemetry",
+  "seoDescription": "Trace an AI agent run step by step: spans for model and tool calls, OpenTelemetry GenAI attributes, what to log versus redact, and how traces feed debugging and evals.",
+  "objectives": [
+    "Describe an agent run as a trace of nested spans for the agent, each model call and each tool call.",
+    "Record the right attributes (model, tokens, finish reason, tool name and call ID) using OpenTelemetry's GenAI conventions, and know their stability status.",
+    "Decide what content to capture or redact, and use traces to debug failures and feed evaluations."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    { "title": "OpenTelemetry: Traces concepts", "url": "https://opentelemetry.io/docs/concepts/signals/traces/" },
+    { "title": "OpenTelemetry GenAI semantic conventions (repository)", "url": "https://github.com/open-telemetry/semantic-conventions-genai" },
+    { "title": "OpenTelemetry GenAI: spans and content capture", "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-spans.md" },
+    { "title": "OpenTelemetry GenAI: execute_tool spans", "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/execute-tool.md" }
+  ],
+  "nodes": [
+    { "id": "user", "label": "Customer", "kind": "user", "x": 9, "y": 50 },
+    { "id": "agent", "label": "Agent runtime", "kind": "app", "x": 34, "y": 50 },
+    { "id": "model", "label": "Model", "kind": "model", "x": 64, "y": 14 },
+    { "id": "tool", "label": "Orders API", "kind": "tool", "x": 64, "y": 86 },
+    { "id": "backend", "label": "Trace backend", "kind": "data", "x": 91, "y": 50 },
+    { "id": "eng", "label": "On-call engineer", "kind": "user", "x": 91, "y": 14 }
+  ],
+  "steps": [
+    {
+      "from": "user", "to": "agent", "label": "request",
+      "title": "A request starts a trace",
+      "text": "The agent runtime opens a root span for the whole run. Every later step becomes a child of it.",
+      "payload": [
+        ["trace_id", "4bf92f35…", "One ID shared by every span in this run, so they can be shown together."],
+        ["root span", "invoke_agent support-agent", "The whole agent run. `invoke_agent` is a well-known GenAI operation name."],
+        ["gen_ai.conversation.id", "\"conv_7f2…\"", "Links several runs from the same chat, when your app has an ID for it."],
+        ["user.id", "hashed", "Useful for support, but personal data: hash or omit."]
+      ],
+      "depth": {
+        "beginner": "When a customer asks the support agent something, the system starts a new record of everything that is about to happen, called a trace. Think of it as the flight recorder for this one request. Every later action, from each call to the AI model to each lookup in another system, will be written into this same record so the whole story can be replayed later.",
+        "practitioner": "A trace is a tree of spans that share a trace ID. Each span has a name, start and end time, status and attributes. The root span covers the agent run; children cover model calls, tool calls and retrieval. OpenTelemetry is the common open standard for producing traces, and it has semantic conventions specifically for generative AI.",
+        "expert": "Propagate trace context across process boundaries (HTTP headers via W3C Trace Context) so tool services and sub-agents join the same trace. Use low-cardinality span names and put IDs in attributes. Decide sampling early: keep every trace that errors or exceeds a cost threshold, and sample routine successes."
+      },
+      "walk": {
+        "why": "Agent runs are multi-step and non-deterministic. Without a single trace tying the steps together, you cannot reconstruct what happened.",
+        "wrong": "Logging each call separately without a shared ID leaves engineers matching timestamps by hand across services.",
+        "example": "An on-call engineer pastes one trace ID from an error report and sees every model and tool call of that conversation in order."
+      }
+    },
+    {
+      "from": "agent", "to": "model", "label": "chat span",
+      "title": "Each model call gets its own span",
+      "text": "The span records which model was asked, with what settings, and is named after the operation and model.",
+      "payload": [
+        ["span name", "\"chat {model}\"", "Convention: `{gen_ai.operation.name} {gen_ai.request.model}`."],
+        ["gen_ai.operation.name", "\"chat\"", "Required. Well-known values include chat, execute_tool and invoke_agent."],
+        ["gen_ai.provider.name", "\"anthropic\"", "Required. Well-known values include anthropic, openai, gcp.gen_ai, aws.bedrock."],
+        ["gen_ai.request.model", "requested model ID", "What you asked for. The response may report a more specific model."],
+        ["status", "development", "The GenAI conventions are still in Development status, so names may change."]
+      ],
+      "depth": {
+        "beginner": "Each time the agent asks the AI model something, a new entry opens inside the trace. It notes which AI service and which model were used and when the call started. Using standard names for these notes means any monitoring tool can understand them, much like using a standard form instead of everyone's own handwriting.",
+        "practitioner": "OpenTelemetry's GenAI conventions name inference spans `{operation} {model}` and define attributes such as `gen_ai.operation.name`, `gen_ai.provider.name` and `gen_ai.request.model`. Following them lets tracing backends display model calls consistently across providers. Many SDKs and instrumentation libraries can emit these spans for you.",
+        "expert": "The GenAI conventions are marked Development, so pin the convention version your instrumentation emits and expect renames; earlier versions used different attribute names for the provider. Record request parameters that affect behaviour and cost (max tokens, effort or reasoning settings) as attributes, since they explain differences between runs."
+      },
+      "walk": {
+        "why": "Standard attribute names make traces portable: the same dashboards and queries work across providers and tools.",
+        "wrong": "Inventing custom names per team leads to dashboards that only work for one service, and breaks when vendors are swapped.",
+        "example": "A company running two model providers compares latency per provider in one chart because both emit `gen_ai.provider.name`."
+      }
+    },
+    {
+      "from": "model", "to": "agent", "label": "tool request + usage",
+      "title": "The response adds usage and finish reason",
+      "text": "When the call ends, the span records token usage, the model that answered and why it stopped.",
+      "payload": [
+        ["gen_ai.usage.input_tokens", "3,240", "Convention: includes cached tokens. Check how your provider reports them before mapping."],
+        ["gen_ai.usage.cache_read.input_tokens", "2,900", "Tokens served from cache; included in the input total above."],
+        ["gen_ai.usage.output_tokens", "180", "Convention: includes any reasoning tokens."],
+        ["gen_ai.response.finish_reasons", "[\"tool_use\"]", "Why generation stopped. Here the model wants a tool."],
+        ["duration", "1.4 s", "Span length: the latency of this one call."]
+      ],
+      "predict": {
+        "question": "Anthropic's API reports cached input tokens separately from `input_tokens`. The OpenTelemetry convention says `gen_ai.usage.input_tokens` should include cached tokens. What should your instrumentation record?",
+        "reveal": "Add them up: uncached input plus cache reads plus cache writes, and record cache reads separately in `gen_ai.usage.cache_read.input_tokens`. Copying the provider's field directly would under-report the real prompt size."
+      },
+      "depth": {
+        "beginner": "When the model answers, the entry is completed with useful facts: how many tokens went in and out (which is what you pay for), how long it took, and why the model stopped. Here it stopped because it wants to look something up with a tool. These numbers turn a vague feeling of \"the agent is slow and expensive\" into a precise picture.",
+        "practitioner": "Record usage, response model, finish reasons and duration on each inference span. Token counts per span let you attribute cost to steps, and duration shows which call dominates latency. Note that providers report usage differently, so map them to the convention carefully, especially cached and reasoning tokens.",
+        "expert": "Under the current conventions `gen_ai.usage.input_tokens` should include cached tokens and `gen_ai.usage.output_tokens` should include reasoning tokens, with breakdown attributes such as `gen_ai.usage.cache_read.input_tokens` and `gen_ai.usage.reasoning.output_tokens`. Anthropic's usage splits cached tokens out, so sum them when mapping. Also emit token-usage metrics for cheap aggregate dashboards."
+      },
+      "walk": {
+        "why": "Per-call usage and timing are the raw material for cost reports, latency budgets and capacity planning.",
+        "wrong": "Mapping provider fields to the convention without reading both definitions silently under-counts cached or reasoning tokens.",
+        "example": "A team discovers one prompt template accounts for most of their output tokens by summing `gen_ai.usage.output_tokens` grouped by span name."
+      }
+    },
+    {
+      "from": "agent", "to": "tool", "label": "execute_tool span",
+      "title": "Tool calls get their own child spans",
+      "text": "Running a tool opens an execute_tool span linked to the model's tool call ID.",
+      "payload": [
+        ["span name", "\"execute_tool lookup_order\"", "Convention: `execute_tool {gen_ai.tool.name}`."],
+        ["gen_ai.tool.name", "\"lookup_order\"", "Which tool ran."],
+        ["gen_ai.tool.call.id", "\"toolu_01A…\"", "The ID the model gave the call, linking request and result."],
+        ["gen_ai.tool.call.arguments", "not captured by default", "Arguments can contain personal data; capture only by explicit opt-in."],
+        ["http child span", "GET /orders/A-5521", "Ordinary HTTP instrumentation nests under the tool span."]
+      ],
+      "predict": {
+        "question": "The customer later says the agent gave a wrong order status. Should the tool span have recorded the full tool arguments and result to help debug this?",
+        "reveal": "Not by default. Arguments and results can contain personal data, so the conventions treat them as opt-in content. Record the tool name, call ID, status, timing and sizes by default; capture content only where your privacy policy allows, for example in staging or a small access-controlled sample."
+      },
+      "depth": {
+        "beginner": "When the agent uses a tool, such as looking up an order, that action gets its own entry inside the trace, linked to the model's request for it. Underneath, the actual web request to the order system appears too. Now you can see exactly which tool ran, how long it took, and whether it worked.",
+        "practitioner": "Wrap each tool execution in a span named `execute_tool {tool name}` with `gen_ai.tool.name` and `gen_ai.tool.call.id`. Existing HTTP or database instrumentation then appears as children automatically, so slow or failing downstream systems are visible inside the agent trace.",
+        "expert": "Tool arguments and results are often sensitive. The conventions define attributes for them but treat content capture as opt-in. Record sizes, status and a hash when you need correlation without content. Mark spans with an error status on failures and record exceptions as span events."
+      },
+      "walk": {
+        "why": "Many agent failures are really tool failures: timeouts, empty results, permission errors. Tool spans make that obvious.",
+        "wrong": "Blaming the model for a wrong answer that actually came from a tool returning stale or empty data.",
+        "example": "A trace shows the model answered \"order not found\" because the order API took 9 seconds and the tool returned a timeout message."
+      }
+    },
+    {
+      "from": "tool", "to": "agent", "label": "504 timeout",
+      "title": "A failure is recorded where it happened",
+      "text": "The tool call times out. The span is marked as an error, and the retry appears as a second span.",
+      "payload": [
+        ["status", "ERROR", "The span's status shows exactly which step failed."],
+        ["error.type", "\"timeout\"", "A short, low-cardinality error category."],
+        ["exception event", "TimeoutError after 3 s", "Details attached to the failing span, not lost in a separate log."],
+        ["retry span", "execute_tool lookup_order (attempt 2) · OK", "Retries appear as siblings, so you can see what the recovery cost."]
+      ],
+      "depth": {
+        "beginner": "The order system does not answer in time. The trace marks that exact step in red with the reason, a timeout, and then shows the second attempt, which works. Later, anyone looking at this request can see the hiccup and how long it added, instead of guessing why the reply was slow.",
+        "practitioner": "Set span status to error with a concise `error.type`, record the exception as an event, and give retries their own spans. Aggregating error spans by tool and type quickly shows which dependency is unreliable and whether retries are worth their latency.",
+        "expert": "Keep error categories low-cardinality so they can be grouped; put details in events. Use tail-based sampling so that traces containing errors are always kept even when you sample successful traffic. Alert on error rate per tool span name, not only on overall agent failures."
+      },
+      "walk": {
+        "why": "Pinning an error to the exact step that failed saves hours compared with searching logs for nearby timestamps.",
+        "wrong": "Swallowing tool errors and passing \"no data\" to the model hides outages and produces confident wrong answers.",
+        "example": "An alert on `execute_tool` error rate for one tool catches a failing internal API before customers report wrong answers."
+      }
+    },
+    {
+      "from": "agent", "to": "backend", "label": "export (OTLP)",
+      "title": "Spans are exported, with content redacted",
+      "text": "Spans are batched and sent to a tracing backend. Prompts and responses are only included if you explicitly opt in.",
+      "payload": [
+        ["protocol", "OTLP over HTTP", "OpenTelemetry's standard export protocol; most tracing backends accept it."],
+        ["content capture", "off by default", "Instructions, prompts, outputs and tool content are gated by an explicit opt-in."],
+        ["gen_ai.input.messages", "omitted", "Only recorded when content capture is enabled and policy allows it."],
+        ["sampling", "keep 100% of errors and costly runs, 10% of others", "Illustrative policy balancing cost and coverage."]
+      ],
+      "depth": {
+        "beginner": "The finished record is sent to a central system where engineers can browse it. Importantly, the customer's actual words and the AI's replies are not included unless the company deliberately chooses to store them. The record mostly holds timings, counts and outcomes, which is enough to find most problems without keeping private conversations.",
+        "practitioner": "Export spans in batches using OTLP to your tracing backend. The GenAI conventions make capturing prompts, outputs and tool content an explicit opt-in. Turn it on only where you have a reason, a retention policy and redaction for secrets and personal data, for example in a staging environment or for sampled debugging.",
+        "expert": "The conventions also describe storing content externally and recording a reference instead of the content itself, which helps meet retention and access-control requirements. Treat traces containing content as sensitive data: restrict access, set retention, and exclude them from broad analytics exports."
+      },
+      "walk": {
+        "why": "Traces are only useful if teams can keep them; keeping them safely means not storing private content by default.",
+        "wrong": "Logging full prompts and responses everywhere creates a large, sensitive dataset that becomes a privacy and security liability.",
+        "example": "Teams commonly capture full content only in staging and on a small sampled slice of production traffic with strict access."
+      }
+    },
+    {
+      "from": "agent", "to": "user", "label": "answer",
+      "title": "The run ends with a complete picture",
+      "text": "The root span closes with totals: time, model calls, tool calls, tokens and outcome.",
+      "payload": [
+        ["duration", "6.8 s", "Total time the customer waited."],
+        ["model calls", "3 · 7,900 input / 420 output tokens", "Summed from child spans."],
+        ["tool calls", "2 (1 retry)", "Including the failed attempt."],
+        ["outcome", "answered · no human handoff", "A business-level result recorded on the root span."]
+      ],
+      "depth": {
+        "beginner": "The customer gets their answer, and the trace is complete. It now shows the whole journey: three questions to the model, two tool lookups including one retry, the total tokens used and the 6.8 seconds the customer waited. One record tells the full story of this request.",
+        "practitioner": "Record outcome attributes on the root span, such as answered, escalated or failed, plus totals. Aggregating root spans gives per-task metrics like cost per completed task, latency percentiles and escalation rate, which matter more than per-call numbers.",
+        "expert": "Root spans are where business and technical views meet. Add attributes such as route, prompt version and model configuration so you can compare versions after a change. Keep cardinality in check: version strings are fine, user IDs are not."
+      },
+      "walk": {
+        "why": "Per-task totals answer the questions managers and users actually ask: how long, how much, did it work.",
+        "wrong": "Only measuring individual model calls hides that one task made twelve calls and cost far more than expected.",
+        "example": "After a prompt change, a team compares average model calls per task by prompt version and spots a loop regression."
+      }
+    },
+    {
+      "from": "backend", "to": "eng", "label": "trace + eval link",
+      "title": "Traces drive debugging and evaluation",
+      "text": "An engineer opens the trace from a complaint, replays it, and turns it into an evaluation case.",
+      "payload": [
+        ["trigger", "customer reports a wrong refund date", "Support links the complaint to the trace ID."],
+        ["finding", "tool returned stale cache data", "Visible in the execute_tool span's attributes and timing."],
+        ["eval case", "added to regression set", "The input and expected outcome become a test for future changes."],
+        ["score", "attached to trace as an evaluation result", "Linking eval scores to traces shows quality next to cost and latency."]
+      ],
+      "depth": {
+        "beginner": "A week later a customer complains about a wrong answer. Support finds the trace for that conversation, and an engineer can see exactly where things went wrong: the order system returned old data. The engineer saves this example as a test case, so future changes are checked against it and the same mistake cannot quietly return.",
+        "practitioner": "Traces are the bridge between production and evaluation. Use them to find failures, then turn representative traces into test cases with expected outcomes. Attach evaluation scores back to traces or runs, so dashboards show quality alongside cost and latency for each version.",
+        "expert": "Build a feedback loop: sample traces, label outcomes (by humans or graders), add hard cases to the eval set, and gate releases on it. Store enough of the trace to reproduce the run, including model and prompt versions and tool responses, subject to your content policy."
+      },
+      "walk": {
+        "why": "Every production failure is a free test case. Traces make it easy to capture exactly what happened.",
+        "wrong": "Fixing a reported problem without adding a regression test lets it come back with the next prompt or model change.",
+        "example": "The evals lesson shows how a fixed set of real cases blocks a release when quality drops; traces are where those cases come from."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Learn to see inside an agent run: every model call, tool call, token and error, recorded in a way you can search, alert on and learn from.",
+    "thirtySeconds": [
+      "A trace records one agent run as a tree of spans: the run, each model call, each tool call and the services they call.",
+      "OpenTelemetry's GenAI conventions give standard names for model, provider, tokens, finish reasons and tools; they are still in Development status.",
+      "Capture timings and counts by default, prompts and outputs only by opt-in, and turn interesting traces into evaluation cases."
+    ],
+    "whyItMatters": "Agents make several model and tool calls per request, often in a different order each time. When a customer gets a wrong or slow answer, you need to see exactly which step failed, what it cost and what the model was given. Tracing turns that from guesswork into a quick lookup, and the same data powers cost reports, latency budgets and the evaluation sets that keep quality from regressing.",
+    "analogy": "A trace is like a parcel-tracking history. Each scan (span) says where the parcel was, when, and whether anything went wrong. If a delivery is late, you look at the scans instead of calling every depot.",
+    "audience": "Engineers running agents in production, SRE and platform teams, and security teams who need an audit trail of AI actions.",
+    "minutes": 16,
+    "prerequisites": ["agent-loop", "tool-use"],
+    "deepDives": [
+      {
+        "title": "Traces, spans and context propagation",
+        "body": "A span is one timed operation with a name, status and attributes. Spans with the same trace ID form a tree through parent-child links.\n\nContext propagation passes the trace ID across services, usually in HTTP headers, so a tool running in another service adds its spans to the same trace. Without it, every service produces disconnected fragments."
+      },
+      {
+        "title": "The OpenTelemetry GenAI conventions",
+        "body": "The conventions define span names such as `chat {model}` and `execute_tool {tool}`, and attributes like `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens` and `gen_ai.tool.call.id`.\n\nThey are in Development status and now live in their own repository, so check the version your libraries emit and expect some names to change."
+      },
+      {
+        "title": "Content capture and privacy",
+        "body": "Prompts, outputs and tool payloads can contain personal data, secrets and confidential business information. The conventions make capturing them an explicit opt-in.\n\nA common policy is metadata always, content in staging, and content in production only for a small, access-controlled sample with defined retention."
+      },
+      {
+        "title": "Sampling: keeping the traces that matter",
+        "body": "Storing every trace of a busy agent can cost more than the agent itself. Sampling keeps a fraction. Head sampling decides at the start of a trace, before anything interesting has happened, so it drops failures as often as successes.\n\nTail sampling decides after the trace finishes, so it can keep every trace with an error, a high cost or a slow response and sample only the routine ones. For agents, where rare failures and cost outliers are what you need to study, tail sampling is usually the better fit."
+      }
+    ],
+    "production": [
+      {
+        "title": "Disconnected traces",
+        "body": "If trace context is not propagated to tool services and sub-agents, you get fragments instead of one story. Test propagation across every hop."
+      },
+      {
+        "title": "Over-collection of content",
+        "body": "Recording all prompts and responses creates a sensitive dataset. Default to metadata, redact secrets, restrict access and set retention for anything with content."
+      },
+      {
+        "title": "Unstable attribute names",
+        "body": "GenAI conventions are still in Development. Pin instrumentation versions and update dashboards deliberately when names change."
+      },
+      {
+        "title": "Sampling away the interesting runs",
+        "body": "Head sampling can drop the rare failing or expensive trace you need. Keep all errors and cost outliers with tail-based sampling."
+      }
+    ],
+    "lab": {
+      "title": "Trace an agent run",
+      "intro": "Build a tiny tracer that produces nested spans for an agent run (invoke_agent, chat, execute_tool) with GenAI-style attributes, marks failures and retries, sums tokens per run, and redacts content unless capture is enabled. Standard library only; no backend needed.",
+      "dir": "labs/observability"
+    },
+    "takeaways": [
+      "Trace each agent run as nested spans: run, model calls, tool calls and downstream services.",
+      "Use OpenTelemetry's GenAI attribute names, and remember they are still in Development status.",
+      "Record usage, finish reasons and errors on the span where they happened.",
+      "Capture prompts and outputs only by explicit opt-in, with redaction and retention rules.",
+      "Turn production traces into evaluation cases so fixed bugs stay fixed."
+    ],
+    "faq": [
+      { "q": "Do I need OpenTelemetry to trace agents?", "a": "No, but it is the common open standard, and many tracing backends and AI libraries support it. Using its conventions keeps your data portable between tools." },
+      { "q": "Should I log full prompts and responses?", "a": "Not by default. The conventions treat content capture as opt-in. Capture content where you need it for debugging, with redaction, access control and a retention limit." },
+      { "q": "How do traces relate to evals?", "a": "Traces show what happened in production; evals check quality on a fixed set of cases. Real traces are the best source of new eval cases, and eval scores can be linked back to traces for comparison." },
+      { "q": "Are the GenAI attribute names final?", "a": "No. As of November 2026 they are marked Development. Pin the version your instrumentation uses and review changes before upgrading." },
+      { "q": "Will tracing slow my agent down?", "a": "Creating spans is cheap compared with model calls that take seconds. Export spans in batches in the background, and avoid capturing large content by default, so tracing adds little overhead." }
+    ],
+    "related": ["evals", "cost-latency", "agent-loop", "incident-response"]
+  },
+  "quiz": [
+    {
+      "q": "What ties all the spans of one agent run together?",
+      "options": ["The model name", "A shared trace ID", "The user's email", "The tool call ID"],
+      "answer": 1,
+      "explain": "All spans in a trace share one trace ID and link to their parent span, forming a tree."
+    },
+    {
+      "q": "Under OpenTelemetry's GenAI conventions, how is a tool execution span named?",
+      "options": ["tool.run", "execute_tool {gen_ai.tool.name}", "chat {tool}", "invoke_tool"],
+      "answer": 1,
+      "explain": "The convention names it `execute_tool` followed by the tool's name, for example `execute_tool lookup_order`."
+    },
+    {
+      "q": "What is the default for capturing prompts and responses in GenAI spans?",
+      "options": ["Always captured", "Captured only on errors", "Opt-in only", "Never possible"],
+      "answer": 2,
+      "explain": "Content such as prompts, outputs and tool payloads is captured only when explicitly enabled, because it can be sensitive."
+    },
+    {
+      "q": "Why keep all traces that contain errors even when sampling?",
+      "options": ["They are smaller", "They are the ones you need for debugging and eval cases", "Backends require it", "Errors are free to store"],
+      "answer": 1,
+      "explain": "Failures and outliers are rare and valuable; tail-based sampling keeps them while sampling routine traffic."
+    }
+  ]
+}

@@ -6,6 +6,32 @@
   "category": "Cybersecurity automation",
   "title": "Vulnerability fixing agent",
   "summary": "From a new CVE to a tested pull request, with a developer reviewing before merge.",
+  "seoTitle": "Prioritise and patch vulnerabilities with an AI agent",
+  "seoDescription": "How an AI agent turns a new CVE into a tested fix: check exposure, weigh CVSS, KEV and EPSS, confirm reachability, open a pull request and let a developer merge.",
+  "objectives": [
+    "Explain what CVE, CVSS, the CISA KEV catalog and EPSS each tell you, and why no single one decides priority.",
+    "Follow an agent from a vulnerability notice to a tested pull request, including the reachability check.",
+    "Identify the review and testing controls that keep automated fixes from breaking production."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    {
+      "title": "FIRST: CVSS v4.0 Specification Document",
+      "url": "https://www.first.org/cvss/v4-0/specification-document"
+    },
+    {
+      "title": "CISA: Known Exploited Vulnerabilities Catalog",
+      "url": "https://www.cisa.gov/known-exploited-vulnerabilities"
+    },
+    {
+      "title": "FIRST: Exploit Prediction Scoring System (EPSS)",
+      "url": "https://www.first.org/epss/"
+    },
+    {
+      "title": "NIST National Vulnerability Database",
+      "url": "https://nvd.nist.gov/"
+    }
+  ],
   "nodes": [
     {
       "id": "feed",
@@ -49,43 +75,125 @@
       "to": "agent",
       "label": "new CVE",
       "title": "A vulnerability is published",
-      "text": "",
+      "text": "A new CVE arrives for a library the company might use.",
       "payload": [
         [
           "id",
           "CVE-2026-XXXXX (example)",
-          ""
+          "A CVE ID is a public name for one specific vulnerability. This one is fictional."
         ],
         [
           "package",
-          "image-lib < 4.2.1",
-          ""
+          "image-lib < 4.2.1 (example)",
+          "Which software and versions are affected; later versions contain the fix."
         ],
         [
-          "CVSS",
-          "8.8 high",
-          "0–10 severity score."
+          "CVSS-B",
+          "8.8 · High",
+          "CVSS v4.0 Base score: how severe the flaw is in general, on a 0–10 scale. Not your risk yet."
+        ],
+        [
+          "KEV",
+          "listed: no",
+          "Whether CISA has reliable evidence of exploitation in the wild."
+        ],
+        [
+          "EPSS",
+          "0.12 (illustrative)",
+          "Estimated probability that it will be exploited in the next 30 days."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "A security notice is published: an image-processing library has a serious flaw. It has an ID, a severity score from 0 to 10 and some extra signals, such as whether attackers are already using it. The AI agent watches these feeds so nobody has to read every notice by hand. The first question is simple: do we even use this library?",
+        "practitioner": "Vulnerability feeds deliver the CVE ID, affected versions and scores. CVSS v4.0 gives a 0–10 severity, labelled CVSS-B when only Base metrics are used. CISA's Known Exploited Vulnerabilities catalog lists flaws with reliable evidence of active exploitation and a clear fix. FIRST's EPSS estimates the probability of exploitation in the next 30 days. Each answers a different question; none alone decides priority.",
+        "expert": "CVSS v4.0 has Base, Threat, Environmental and Supplemental metric groups; teams that apply Threat and Environmental metrics produce CVSS-BTE scores that reflect their own context. KEV entries require a CVE ID, reliable evidence of in-the-wild exploitation and a clear remediation. EPSS is a probability with percentiles, best used to rank large backlogs rather than as a yes/no gate."
+      },
+      "walk": {
+        "why": "Thousands of CVEs are published every year. Automated intake and scoring let a team focus on the few that matter to them.",
+        "wrong": "Treating the CVSS Base score as the whole story leads to panic over unreachable flaws and complacency about lower-scored ones that attackers are actively using.",
+        "example": "Many teams treat any KEV-listed vulnerability in internet-facing systems as urgent regardless of its CVSS score."
+      },
+      "predict": {
+        "question": "Two new CVEs arrive: one scores 9.8 but nobody has seen it exploited; the other scores 7.5 and is on CISA's KEV list. Which deserves attention first if both affect an internet-facing service?",
+        "reveal": "Usually the KEV one. KEV means there is reliable evidence attackers are already using it, while the higher CVSS score only describes potential severity."
+      }
     },
     {
       "from": "agent",
       "to": "repo",
       "label": "scan",
-      "title": "Are we affected, and is it reachable?",
-      "text": "The dependency is checked, then the agent reads the code to see whether the vulnerable function is actually called. That separates urgent fixes from noise.",
+      "title": "Are we affected?",
+      "text": "The agent checks dependency manifests and the software bill of materials for the vulnerable versions.",
       "payload": [
         [
-          "found in",
-          "services/upload (v4.1.0)",
-          ""
+          "sources",
+          "lockfiles · SBOM · container images",
+          "Where installed versions are recorded. Lockfiles show exact versions; an SBOM lists all components."
         ],
         [
-          "reachable",
-          "yes: user avatar upload",
-          "Exploitable from the internet, so it's top priority."
+          "found in",
+          "services/upload (image-lib 4.1.0)",
+          "One service uses an affected version."
+        ],
+        [
+          "not found in",
+          "web, billing",
+          "Other services use a fixed version or not at all, so they need no change."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The agent checks every project's list of building blocks to see where this library is used and which version. Only one service, the one that handles file uploads, has an affected version. The others are already safe. That narrows a scary notice down to one place to fix.",
+        "practitioner": "Lockfiles record exact dependency versions, and a software bill of materials (SBOM) lists every component in a build, including transitive dependencies pulled in by other libraries. The agent matches the CVE's affected range against both. Container images matter too: a vulnerable system library can live in a base image even when the application code never mentions it.",
+        "expert": "Version matching has edge cases: backported fixes in distribution packages, vendored copies, and forks with different names. Prefer SBOMs generated at build time over guesses from source. Record negative results (\"checked, not affected\") with evidence, because auditors and customers often ask for them."
+      },
+      "walk": {
+        "why": "Knowing exactly where a vulnerable component lives turns a company-wide worry into a specific task.",
+        "wrong": "Scanning only source manifests misses vulnerable libraries inside container base images or vendored code.",
+        "example": "When a widely used library has a serious flaw, a current SBOM lets a team search one inventory instead of checking every project by hand."
+      }
+    },
+    {
+      "from": "repo",
+      "to": "agent",
+      "label": "reachable?",
+      "title": "Is the vulnerable code reachable?",
+      "text": "The agent reads the code to see whether the vulnerable function can actually be triggered.",
+      "payload": [
+        [
+          "vulnerable function",
+          "decode_header() (example)",
+          "The specific code path named in the advisory."
+        ],
+        [
+          "call path",
+          "POST /avatar → resize() → decode_header()",
+          "User uploads reach the vulnerable function, so it can be triggered from the internet."
+        ],
+        [
+          "exposure",
+          "internet-facing",
+          "Raises priority: anyone can send a crafted image."
+        ],
+        [
+          "verdict",
+          "reachable · fix now",
+          "Combines severity, exploitation signals and context into a priority."
+        ]
+      ],
+      "depth": {
+        "beginner": "Having the library is not the same as being in danger. The agent reads the code to see whether the faulty part is ever used. Here it is: when anyone uploads a profile picture, the image goes through the faulty function. Because that upload page is on the internet, this becomes a fix-it-now job.",
+        "practitioner": "Reachability analysis follows call paths from entry points, such as web routes, to the vulnerable function. A reachable flaw on an internet-facing service is far more urgent than the same flaw in an unused code path or an internal batch tool. The agent records the path it found as evidence, so a developer can check its reasoning quickly.",
+        "expert": "Static reachability is approximate: dynamic dispatch, reflection and configuration flags can hide or invent paths. Treat \"not reachable\" as lower priority, not as no risk, and revisit when code changes. Some ecosystems publish exploitability statements (VEX) that record whether a product is affected; generating them from this analysis helps downstream users."
+      },
+      "walk": {
+        "why": "Most vulnerable dependencies are never reached in a given application. Reachability separates urgent work from noise.",
+        "wrong": "Over-trusting a \"not reachable\" result can leave a real exposure open if the analysis missed a dynamic call path.",
+        "example": "A team can use reachability results to move unreachable dependency alerts out of the urgent queue while keeping them tracked for later."
+      },
+      "predict": {
+        "question": "The flaw scores 8.8 (High), but it is not on the KEV list. Should it wait for the next monthly patch cycle?",
+        "reveal": "Not here. The vulnerable function is reachable from an internet-facing upload page, so anyone can try to trigger it. Context such as reachability and exposure can make a flaw urgent even before exploitation is reported."
+      }
     },
     {
       "from": "agent",
@@ -97,47 +205,273 @@
         [
           "change",
           "image-lib 4.1.0 → 4.2.1",
-          ""
+          "The smallest upgrade that contains the fix, to limit side effects."
         ],
         [
-          "test",
+          "code edits",
+          "none needed (release notes checked)",
+          "The agent read the changelog for breaking changes between these versions."
+        ],
+        [
+          "test added",
           "rejects malformed image header",
-          ""
+          "Proves the fix works and stops the bug coming back."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The agent makes a separate copy of the code, called a branch, and upgrades the library to the fixed version. It reads the release notes to check nothing else needs changing, and adds a small test that feeds in a broken image to make sure the upload page now rejects it safely.",
+        "practitioner": "Prefer the smallest version bump that includes the fix; large jumps bring unrelated changes and risk. The agent reads release notes for breaking changes, updates call sites if needed and adds a regression test based on the advisory. All work happens on a branch, never directly on the main code line.",
+        "expert": "Pin the new version and update the lockfile so builds are reproducible. If no fixed version exists, propose mitigations such as input validation or disabling the feature, clearly marked as temporary. Keep the agent's repository permissions to opening branches and pull requests; it should not be able to push to protected branches or change CI settings."
+      },
+      "walk": {
+        "why": "Small, focused changes are easy to review and easy to roll back.",
+        "wrong": "Automated upgrades that jump several major versions can break unrelated features and erode trust in the automation.",
+        "example": "Dependency update tools commonly open one small pull request per upgrade, so each change can be reviewed and reverted on its own."
+      }
     },
     {
       "from": "repo",
       "to": "ci",
       "label": "run tests",
       "title": "Prove nothing broke",
-      "text": "",
+      "text": "The continuous integration system builds the code and runs the test suite.",
       "payload": [
         [
-          "result",
-          "412 passed · 0 failed",
-          ""
+          "build",
+          "passed",
+          "The code still compiles and packages correctly."
+        ],
+        [
+          "tests",
+          "412 passed · 0 failed (illustrative)",
+          "Existing behaviour is unchanged as far as the tests can tell."
+        ],
+        [
+          "security scan",
+          "CVE no longer detected",
+          "The dependency scanner confirms the fixed version is in use."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Before anyone trusts the change, an automatic test system builds the project and runs hundreds of checks. Everything passes, and the security scanner confirms the faulty version is gone. This is the safety net that catches mistakes, whether a person or an AI made the change.",
+        "practitioner": "Continuous integration (CI) runs the same build, tests and scans on every change. For automated fixes it is the main safety net, so test coverage of the affected feature matters. Re-running the dependency scanner proves the vulnerable version is no longer present rather than assuming it.",
+        "expert": "Treat CI as untrusted-input territory too: the agent's branch should not be able to modify workflow files or secrets. Flaky tests undermine automated fixes, because people learn to re-run until green. Track how often agent pull requests pass CI first time; it is a useful quality signal."
+      },
+      "walk": {
+        "why": "Tests turn \"I think this is safe\" into evidence.",
+        "wrong": "Low test coverage means a green build proves little; flaky tests teach people to ignore failures.",
+        "example": "Teams that rely on automated dependency updates usually require a full test run and a passing security scan before review."
+      }
+    },
+    {
+      "from": "ci",
+      "to": "agent",
+      "label": "green",
+      "title": "Results come back",
+      "text": "The agent reads the CI results and prepares the pull request description.",
+      "payload": [
+        [
+          "status",
+          "all checks passed",
+          "Required before the pull request is offered for review."
+        ],
+        [
+          "duration",
+          "7 min (illustrative)",
+          "Fast feedback keeps the fix moving."
+        ],
+        [
+          "artifacts",
+          "test report · scan report",
+          "Linked in the pull request so the reviewer can check them."
+        ]
+      ],
+      "depth": {
+        "beginner": "The test results come back green. The agent collects the reports so the developer who reviews the change can see the proof without hunting for it.",
+        "practitioner": "If CI fails, the agent reads the failure, tries a bounded number of fixes, and otherwise hands over to a human with what it learned. If CI passes, it drafts the pull request with the evidence: advisory link, affected path, scores, test and scan results.",
+        "expert": "Cap retry attempts and budget so a stubborn failure does not consume hours of compute. Record every attempt in the pull request history; reviewers should see if the agent struggled."
+      },
+      "walk": {
+        "why": "Evidence attached to the change speeds review and builds trust in the automation.",
+        "wrong": "Agents that silently retry until tests pass may \"fix\" tests instead of code. Review diffs to test files with extra care.",
+        "example": "A reviewer can approve a well-documented dependency fix in a few minutes when the scan and test reports are linked directly."
+      }
     },
     {
       "from": "agent",
       "to": "dev",
       "label": "pull request",
       "title": "A developer reviews and merges",
-      "text": "The agent never merges to production itself. Days of manual work become a 10-minute review.",
+      "text": "The agent never merges to production itself. A developer reviews and decides.",
       "payload": [
         [
-          "PR",
+          "PR title",
           "\"Fix CVE-2026-XXXXX in image-lib (reachable via avatar upload)\"",
-          ""
+          "Clear, specific titles help reviewers prioritise."
         ],
         [
           "includes",
-          "impact explanation · test · rollback note",
-          ""
+          "impact explanation · call path · test · rollback note",
+          "Everything a reviewer needs in one place."
+        ],
+        [
+          "merge rights",
+          "developer only",
+          "Branch protection keeps the final decision with a person."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The agent opens a request asking a developer to accept the change. It explains the problem, why it matters here, what changed and how to undo it if needed. The developer reviews it and merges. The AI did the legwork in minutes; a person still makes the final call.",
+        "practitioner": "Branch protection rules require review and passing checks before merge, and the agent's account cannot merge. A good pull request explains impact in plain language, links the advisory, shows the call path, lists tests and includes a rollback note. Review time is the main cost left, so make reviewing easy.",
+        "expert": "Measure mean time to remediate per severity and exposure class, and the share of agent pull requests merged without changes. Rising rejection rates signal the agent needs better context or narrower scope. For KEV-listed flaws on exposed systems, set and track explicit deadlines."
+      },
+      "walk": {
+        "why": "A person who knows the system checks for side effects the tests may not cover and stays accountable for production.",
+        "wrong": "Letting automation merge to production removes the last human check; rubber-stamp reviews do the same in practice.",
+        "example": "Many organisations let bots open security pull requests but require code-owner approval before merge."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Learn how an agent turns a vulnerability notice into a tested fix, and how CVSS, KEV, EPSS and reachability combine into a sensible priority.",
+    "thirtySeconds": [
+      "A new CVE arrives with a severity score, exploitation signals and affected versions.",
+      "The agent checks where the vulnerable version is used and whether the flawed code is reachable.",
+      "It opens a small, tested pull request with evidence; a developer reviews and merges."
+    ],
+    "whyItMatters": "Most organisations have far more known vulnerabilities than time to fix them, and attackers often exploit flaws soon after they are published. Sorting by severity score alone wastes effort on unreachable issues and can miss flaws that are being actively exploited. An agent that gathers context, writes small fixes and proves them with tests can shrink the gap between disclosure and patch, while developers keep control of what ships.",
+    "analogy": "A car manufacturer issues a recall for a faulty part. A good garage first checks which customers' cars have that part, then whether it is the version that fails, and fixes the cars driven daily on motorways before the ones parked in a barn. The mechanic still signs off each repair.",
+    "audience": "Application security engineers, developers who own services, and platform teams running dependency and patch automation.",
+    "minutes": 17,
+    "prerequisites": [
+      "tool-use",
+      "human-in-loop"
+    ],
+    "deepDives": [
+      {
+        "title": "CVE, CVSS, KEV and EPSS in one place",
+        "body": "A CVE ID names a specific vulnerability. CVSS v4.0, published by FIRST in November 2023, scores technical severity from 0 to 10; scores are labelled by the metric groups used, such as CVSS-B for Base only or CVSS-BTE when Threat and Environmental metrics are added.\n\nCISA's Known Exploited Vulnerabilities catalog lists flaws with a CVE ID, reliable evidence of exploitation in the wild and a clear remediation. EPSS from FIRST estimates the probability of exploitation in the next 30 days. Use them together."
+      },
+      {
+        "title": "Reachability and exposure",
+        "body": "A vulnerable library only hurts you if attackers can reach the flawed code. Reachability analysis traces paths from entry points such as web routes to the vulnerable function; exposure asks whether that entry point is on the internet, internal or offline.\n\nReachable plus exposed usually beats a higher score that is unreachable. But reachability tools are approximate, so treat \"not reachable\" as lower priority rather than safe."
+      },
+      {
+        "title": "Small changes, strong gates",
+        "body": "Automated fixes earn trust when they are small, tested and easy to undo. Keep the agent's permissions to branches and pull requests, require passing CI and code-owner review, and include a rollback note in every change."
+      },
+      {
+        "title": "SBOMs and transitive dependencies",
+        "body": "Most applications pull in far more code than their own manifest lists, because each library brings its own dependencies. A vulnerable component three levels deep is just as exploitable as one you imported directly.\n\nA software bill of materials (SBOM) generated at build time lists every component and version in what you actually ship, including container base images. Keeping SBOMs per release lets an agent answer \"are we affected?\" by searching data instead of rebuilding projects."
+      }
+    ],
+    "production": [
+      {
+        "title": "Scoring without context",
+        "body": "Sorting the backlog by CVSS Base score alone floods teams with unreachable issues. Combine severity with KEV status, EPSS, reachability, exposure and asset importance."
+      },
+      {
+        "title": "Breaking upgrades",
+        "body": "Big version jumps bring unrelated changes. Prefer the smallest fixed version, read release notes and rely on good tests for the affected feature."
+      },
+      {
+        "title": "Agent permissions on code",
+        "body": "An agent that can edit CI workflows or push to protected branches is a supply-chain risk. Limit it to opening branches and pull requests, and protect workflow files and secrets."
+      },
+      {
+        "title": "Transitive and hidden components",
+        "body": "Vulnerable code often arrives through dependencies of dependencies or container base images. Use build-time SBOMs and scan images, not just source manifests."
+      },
+      {
+        "title": "Alert overload",
+        "body": "Dependency scanners can produce hundreds of findings per service. Without prioritisation by exploitation signals, reachability and exposure, teams stop reading them. Route only the top priority classes to people, and track the rest on a schedule."
+      }
+    ],
+    "lab": {
+      "title": "A vulnerability prioritiser",
+      "intro": "Rank findings by combining CVSS, KEV status, EPSS, reachability and exposure into a clear priority with reasons. Runs offline on example data, so no feeds or keys are needed.",
+      "dir": "labs/vuln-patch"
+    },
+    "takeaways": [
+      "CVSS measures severity, KEV shows confirmed exploitation, EPSS estimates likelihood; none decides priority alone.",
+      "Check where the vulnerable version is used, including transitive dependencies and container images.",
+      "Reachable, internet-facing flaws come first; treat \"not reachable\" as lower priority, not zero risk.",
+      "Ship small, tested fixes with evidence and a rollback note.",
+      "Agents open pull requests; developers review and merge."
+    ],
+    "faq": [
+      {
+        "q": "Is a CVSS 9.8 always more urgent than a 7.5?",
+        "a": "No. A 7.5 that is listed in CISA's KEV catalog and reachable from the internet is usually more urgent than a 9.8 in code your application never calls."
+      },
+      {
+        "q": "What does it mean if a vulnerability is on the KEV list?",
+        "a": "CISA has reliable evidence it has been exploited in the wild and there is a clear remediation. US federal civilian agencies must fix KEV entries within deadlines set by CISA directives, and many other organisations use the list as a priority signal."
+      },
+      {
+        "q": "Can the agent merge its own fix?",
+        "a": "It should not. Branch protection should require passing checks and a human code-owner review before merge."
+      },
+      {
+        "q": "What if there is no fixed version yet?",
+        "a": "The agent can propose temporary mitigations such as stricter input validation or disabling the affected feature, clearly marked as temporary, and keep watching for a release."
+      },
+      {
+        "q": "How is EPSS different from CVSS?",
+        "a": "CVSS describes how severe a vulnerability is if exploited. EPSS estimates how likely it is to be exploited in the wild in the next 30 days. A severe flaw can have a low EPSS, and a moderate one can have a high EPSS; use both."
+      }
+    ],
+    "related": [
+      "software-plus-ai-agents",
+      "cloud-remediation",
+      "evals",
+      "human-in-loop"
+    ]
+  },
+  "quiz": [
+    {
+      "q": "What does the CISA KEV catalog tell you that CVSS does not?",
+      "options": [
+        "The exact fix version",
+        "That there is reliable evidence of exploitation in the wild",
+        "The probability of exploitation in 30 days",
+        "Which of your systems are affected"
+      ],
+      "answer": 1,
+      "explain": "KEV lists vulnerabilities with reliable evidence of active exploitation. CVSS describes severity; EPSS estimates probability."
+    },
+    {
+      "q": "A High-severity flaw is in a library you use, but the vulnerable function is never called. What is the sensible priority?",
+      "options": [
+        "Emergency fix tonight",
+        "Lower priority, scheduled, and rechecked when code changes",
+        "Ignore it permanently",
+        "Remove the library immediately"
+      ],
+      "answer": 1,
+      "explain": "Unreachable flaws are less urgent, but reachability analysis is approximate and code changes over time, so keep them on the list."
+    },
+    {
+      "q": "What does EPSS estimate?",
+      "options": [
+        "Technical severity on a 0–10 scale",
+        "The probability a CVE is exploited in the wild in the next 30 days",
+        "Whether a fix exists",
+        "How many systems are affected worldwide"
+      ],
+      "answer": 1,
+      "explain": "EPSS, maintained by a FIRST special interest group, publishes a 0–1 probability of exploitation in the next 30 days."
+    },
+    {
+      "q": "Which permission should a vulnerability-fixing agent NOT have?",
+      "options": [
+        "Create a branch",
+        "Open a pull request",
+        "Read release notes",
+        "Merge directly to the protected main branch"
+      ],
+      "answer": 3,
+      "explain": "Merging stays with a human reviewer behind branch protection, so a mistaken or manipulated agent cannot ship changes alone."
     }
   ]
 }

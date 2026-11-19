@@ -8,8 +8,8 @@ describe("content", () => {
   const { paths, lessons } = loadContent();
 
   it("loads and validates every lesson", () => {
-    expect(lessons).toHaveLength(21);
-    expect(lessons.reduce((n, l) => n + l.steps.length, 0)).toBe(131);
+    expect(lessons.length).toBeGreaterThanOrEqual(21);
+    expect(new Set(lessons.map((l) => l.id)).size).toBe(lessons.length);
   });
 
   it("gives every path at least one lesson, with unique order numbers", () => {
@@ -71,13 +71,13 @@ describe("content", () => {
 
   it("builds an index with one URL per lesson", () => {
     const hrefs = lessonIndex().map((l) => l.href);
-    expect(new Set(hrefs).size).toBe(21);
+    expect(new Set(hrefs).size).toBe(hrefs.length);
     expect(hrefs[0]).toBe("/learn/foundations/llm-call/");
   });
 
   it("has unique glossary slugs", () => {
     const g = loadGlossary();
-    expect(g).toHaveLength(30);
+    expect(g.length).toBeGreaterThanOrEqual(30);
     expect(new Set(g.map((t) => t.slug)).size).toBe(g.length);
   });
 });

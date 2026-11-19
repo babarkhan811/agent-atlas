@@ -5,7 +5,29 @@
   "tier": "pro",
   "category": "Cybersecurity automation",
   "title": "Automated access reviews",
-  "summary": "Leavers and unused admin rights are a favourite way in for attackers. An agent does the quarterly review in an afternoon.",
+  "summary": "Leavers and unused admin rights are a favourite way in for attackers. An agent prepares the review so managers decide in minutes.",
+  "seoTitle": "Automating user access reviews with an AI agent",
+  "seoDescription": "How an agent compares identity data with HR records, flags leavers and unused admin rights, gets managers' decisions, revokes access and assembles audit evidence.",
+  "objectives": [
+    "Explain why stale accounts and unused privileges are a security risk and what access reviews check.",
+    "Follow an automated review from identity and HR data to manager decisions, revocation and evidence.",
+    "Identify which review decisions can be automated and which need the manager's context."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    {
+      "title": "NIST SP 800-53 Rev. 5: Security and Privacy Controls (AC-2 Account Management, AC-6 Least Privilege)",
+      "url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-53r5.pdf"
+    },
+    {
+      "title": "Microsoft Learn: Revoke user access in an emergency in Microsoft Entra ID",
+      "url": "https://learn.microsoft.com/en-us/entra/identity/users/users-revoke-access"
+    },
+    {
+      "title": "MITRE ATT&CK T1078: Valid Accounts",
+      "url": "https://attack.mitre.org/techniques/T1078/"
+    }
+  ],
   "nodes": [
     {
       "id": "idp",
@@ -49,24 +71,39 @@
       "to": "agent",
       "label": "all accounts",
       "title": "Collect who has access to what",
-      "text": "",
+      "text": "The agent exports every account, group membership and app assignment from the identity provider.",
       "payload": [
         [
           "accounts",
-          "1,240",
-          ""
+          "1,240 (illustrative)",
+          "Every user and service account, not just employees."
         ],
         [
           "apps",
           "86",
-          ""
+          "Applications connected through single sign-on, each with its own roles."
         ],
         [
           "admin grants",
           "312",
-          "Each one is a big target."
+          "Privileged roles, the most valuable targets for attackers."
+        ],
+        [
+          "last sign-in",
+          "per account and app",
+          "Shows which access is actually used."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The identity provider is the system that controls who can log in to what. The agent asks it for a full list: every account, every app each person can open, and which accounts have powerful admin rights. It also gets the date each person last used each app. This is the \"who has keys to which doors\" list.",
+        "practitioner": "The export covers users, service accounts, group memberships, app role assignments and privileged roles, plus last sign-in timestamps. Read-only access is enough for this step. Service accounts and shared accounts need owners too, because they are often forgotten and rarely reviewed.",
+        "expert": "Normalise identities across systems: one person may have several accounts, and some apps keep local accounts outside single sign-on. Last-sign-in data can lag or be missing for some protocols, so treat it as evidence rather than truth. Snapshot the export with a timestamp; the review must be reproducible for auditors."
+      },
+      "walk": {
+        "why": "You cannot review access you cannot see. A complete inventory is the foundation of every access review.",
+        "wrong": "Reviews that only cover single-sign-on apps miss local accounts, admin consoles and service accounts, which attackers love.",
+        "example": "A first full inventory often turns up service accounts that nobody remembers creating, which is exactly why each one needs a named owner."
+      }
     },
     {
       "from": "hr",
@@ -76,92 +113,332 @@
       "text": "Matching against HR data shows people who left or changed teams but kept their access.",
       "payload": [
         [
-          "leavers",
-          "14 still active",
-          "Should have been switched off on their last day."
+          "employees",
+          "1,108 active",
+          "The source of truth for who works here and in which role."
+        ],
+        [
+          "leavers still active",
+          "14",
+          "Accounts that should have been disabled on the person's last day."
         ],
         [
           "team changes",
           "37",
-          ""
+          "People who moved roles may still hold their old team's access."
+        ],
+        [
+          "no HR match",
+          "48 (mostly service accounts)",
+          "Accounts with no person behind them need a named owner."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Next the agent checks the HR system, which knows who actually works here and in what job. Comparing the two lists shows problems right away: 14 people who have left still have working accounts, and 37 people who changed teams still have their old team's access. Each of those is an unlocked door nobody is watching.",
+        "practitioner": "Joining identity data with HR records by employee ID finds leavers, movers and orphaned accounts. Leaver accounts that remain active are a classic way in for attackers using valid credentials, which MITRE ATT&CK catalogues as T1078 Valid Accounts. Movers accumulate access over time, called privilege creep, unless old access is removed at each move.",
+        "expert": "Use stable identifiers, not names or emails, which change. Account for contractors and external staff who may not be in the main HR system. NIST SP 800-53 AC-2 expects accounts to be reviewed at an organisation-defined frequency and, under AC-2(3), disabled within defined time periods when expired, no longer associated with a user or inactive."
+      },
+      "walk": {
+        "why": "HR data is the independent check on identity data. Differences between the two are where risk hides.",
+        "wrong": "Matching on names produces false matches and misses. Contractors outside HR systems are often never reviewed.",
+        "example": "If disabling a leaver's account depends on someone remembering to file a ticket, some will be missed; an automated HR-to-identity comparison catches them."
+      },
+      "predict": {
+        "question": "A person moved from Sales to HR six months ago. What access problem is most likely?",
+        "reveal": "They probably still have their old Sales access, such as CRM admin, on top of their new HR access. This build-up of access over moves is called privilege creep."
+      }
     },
     {
       "from": "agent",
       "to": "manager",
       "label": "review list",
       "title": "AI flags what looks wrong",
-      "text": "Instead of a 1,240-row spreadsheet, each manager gets a short list with a reason for each item.",
+      "text": "Instead of a huge spreadsheet, each manager gets a short list with a reason for each item.",
       "payload": [
         [
           "flag",
           "j.lee: admin on billing, unused 140 days",
-          "Unused admin = remove."
+          "Unused privileged access is a strong candidate for removal."
         ],
         [
           "flag",
           "m.ali: moved Sales → HR, still has CRM admin",
-          "Role mismatch."
+          "Role mismatch from a team move."
         ],
         [
           "to review",
-          "61 items (was 1,240 rows)",
-          ""
+          "61 items (from 1,240 rows, illustrative)",
+          "Focuses attention on what is most likely wrong."
+        ],
+        [
+          "default",
+          "keep unless manager says remove",
+          "Shown explicitly; some teams choose the opposite default for privileged access."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Traditionally, managers get a giant spreadsheet and click \"approve all\" because there is no time to check. Here the agent sends each manager a short list of things that look wrong, each with a plain reason: \"has billing admin but hasn't used it in 140 days\". That turns a chore into a few quick decisions.",
+        "practitioner": "The agent ranks findings by risk: privileged access, external sharing, long-unused grants and role mismatches first. Each item shows the evidence (last use, role change date) and a suggested action. The default for no response matters: \"remove unless confirmed\" is safer for privileged access; \"keep unless removed\" avoids outages for everyday tools.",
+        "expert": "Show managers a complete list as well as the flagged short list, or auditors may argue the review was incomplete. Explain why each item was flagged so the AI's ranking can be challenged. Measure manager agreement with suggestions; very high agreement without changes can indicate rubber-stamping rather than accuracy."
+      },
+      "walk": {
+        "why": "People review short, explained lists carefully and long, unexplained ones carelessly.",
+        "wrong": "Over-filtering can hide real issues from managers, and suggestions presented as defaults get accepted without thought.",
+        "example": "Access review tools commonly highlight unused and privileged access first so reviewers spend their attention where risk is highest."
+      },
+      "predict": {
+        "question": "A manager gets a list of 1,240 rows and 2 days to review it. What usually happens?",
+        "reveal": "Most people click \"approve all\". That is why the agent sends a short list of flagged items with reasons, so the manager's attention goes where the risk is."
+      }
     },
     {
       "from": "manager",
       "to": "agent",
       "label": "decisions",
       "title": "Managers confirm",
-      "text": "People keep the final say because they know context the data doesn't, like a contractor coming back next month.",
+      "text": "People keep the final say because they know context the data doesn't.",
       "payload": [
         [
           "revoke",
           "52",
-          ""
+          "Confirmed removals, each linked to the manager's decision."
         ],
         [
           "keep",
           "9 (with reason)",
-          ""
+          "Kept access needs a reason, for example a contractor returning next month."
+        ],
+        [
+          "no response",
+          "0 after reminder",
+          "Escalation rules handle managers who don't reply."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Managers go through their lists. Most suggestions are accepted, but some are kept with a reason: a contractor returning next month still needs their account. Only the manager knows things like that, which is why the final decision stays with a person.",
+        "practitioner": "Decisions are recorded per item with the reviewer, timestamp and reason. \"Keep\" decisions on flagged privileged access should require a written justification. Non-responses trigger reminders and then escalation, because an unfinished review is a finding in itself.",
+        "expert": "Separation of duties matters: reviewers should not approve their own access, and privileged-role reviews may need a second reviewer. Keep decisions immutable once submitted; changes create a new entry. This audit trail is what turns the review into evidence."
+      },
+      "walk": {
+        "why": "Context such as planned returns, temporary projects and on-call duties is in people's heads, not in logs.",
+        "wrong": "Bulk \"approve all\" clicks make the review meaningless; reviewers approving their own access defeats the control.",
+        "example": "Auditors often ask for evidence that reviewers actually changed something, not just that a review happened."
+      }
     },
     {
       "from": "agent",
       "to": "idp",
       "label": "revoke",
       "title": "Apply the changes",
-      "text": "",
+      "text": "The agent removes the confirmed access and disables leaver accounts.",
       "payload": [
         [
           "revoked",
-          "52 grants · 14 accounts disabled",
-          ""
+          "52 grants",
+          "Removed group memberships and app roles, as decided."
+        ],
+        [
+          "disabled",
+          "14 leaver accounts",
+          "Disabling first keeps the account for investigation before later deletion."
+        ],
+        [
+          "sessions",
+          "revoked for disabled accounts",
+          "Stops new tokens; already-issued access tokens can work until they expire unless the app supports continuous access evaluation."
+        ],
+        [
+          "failures",
+          "1 app with a local account (ticket raised)",
+          "Some apps cannot be changed through the identity provider and need manual work."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The agent now applies the decisions: it removes the 52 unneeded permissions and switches off the 14 leaver accounts. It also signs those accounts out. One app keeps its own separate accounts, so the agent cannot change it automatically and opens a ticket for a person to do it.",
+        "practitioner": "Changes go through the identity provider's API using a narrowly scoped automation account. Leaver accounts are disabled rather than deleted, so data and logs remain for investigation. Session revocation stops new tokens; already-issued access tokens may keep working until they expire unless the app supports continuous access evaluation.",
+        "expert": "Make every change idempotent and logged with the decision ID that authorised it. Verify by re-reading state after the change. Handle apps outside single sign-on with tickets tracked to closure, or the review leaves gaps behind a green dashboard."
+      },
+      "walk": {
+        "why": "Decisions only reduce risk once they are applied, verified and logged.",
+        "wrong": "Changes that fail silently, or apps outside single sign-on, leave access in place while reports say it was removed.",
+        "example": "Many identity teams disable leaver accounts immediately and delete them after a retention period, so evidence is not lost."
+      }
     },
     {
       "from": "agent",
       "to": "audit",
       "label": "evidence pack",
       "title": "Proof for auditors",
-      "text": "Standards like SOC 2 and ISO 27001 require regular access reviews. The agent saves who decided what and when.",
+      "text": "The agent assembles who decided what and when, with before and after lists.",
       "payload": [
         [
           "contents",
-          "before/after lists · approvals · timestamps",
-          ""
+          "before/after snapshots · decisions · timestamps · exceptions",
+          "Everything an auditor needs to verify the review happened and changed things."
+        ],
+        [
+          "frameworks",
+          "maps to NIST SP 800-53 AC-2, ISO/IEC 27001 and SOC 2 access controls",
+          "The same evidence supports several audit programmes."
         ],
         [
           "effort",
-          "1 afternoon (was ~2 weeks)",
-          ""
+          "1 afternoon (illustrative)",
+          "Track real numbers before and after automation to judge the benefit."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Many companies must prove to auditors that they check access regularly. The agent packages the proof: the list before, the decisions with names and dates, the exceptions with reasons and the list after. What used to take weeks of spreadsheet work can be gathered in one afternoon.",
+        "practitioner": "Audit evidence must show completeness (everything was in scope), accountability (named reviewers), action (changes were made) and timeliness (done on schedule). Generating the pack from the system's records, not from screenshots, makes it consistent and repeatable. The same evidence supports frameworks such as NIST SP 800-53 AC-2, ISO/IEC 27001 and SOC 2.",
+        "expert": "Store evidence in a write-once location with retention matching audit requirements. Include the tool versions and data snapshot times so results can be reproduced. Track review completion rate and time-to-revoke as ongoing metrics rather than waiting for the next audit."
+      },
+      "walk": {
+        "why": "Auditors need verifiable proof, and good evidence also shows the security team whether reviews actually reduce access.",
+        "wrong": "Evidence assembled by hand from screenshots is slow, inconsistent and hard to verify.",
+        "example": "Organisations that run access reviews every quarter or year to support audits can reuse the same automated evidence pack each cycle."
+      }
+    }
+  ],
+  "article": {
+    "promise": "See how an agent turns a painful quarterly access review into a short list of clear decisions, applied and evidenced automatically.",
+    "thirtySeconds": [
+      "The agent compares identity data with HR records to find leavers, movers and unused privileges.",
+      "Managers get short, explained review lists and make the decisions.",
+      "The agent applies the changes, verifies them and assembles audit evidence."
+    ],
+    "whyItMatters": "Attackers often use valid accounts: an ex-employee's account that was never disabled, or an admin right someone stopped using years ago. Access reviews are meant to catch these, but manual reviews with giant spreadsheets mostly produce \"approve all\" clicks. Automating the data work and explaining each flag lets managers make real decisions, removes risky access faster and produces evidence auditors can trust.",
+    "analogy": "It's like a hotel checking which guests still have working room keys. Instead of asking the manager to inspect every key card, the system lists cards for guests who already checked out and staff who changed floors, the manager confirms, and the cards are deactivated with a log of who decided.",
+    "audience": "Identity and access management teams, security and compliance staff, and IT managers who run or answer access reviews.",
+    "minutes": 15,
+    "prerequisites": [
+      "tool-use",
+      "human-in-loop"
+    ],
+    "deepDives": [
+      {
+        "title": "Joiners, movers and leavers",
+        "body": "Access risk builds up at three moments: when people join (too much access by default), move (old access kept) and leave (accounts not disabled). Automated joiner-mover-leaver processes fix most issues at the moment they happen.\n\nAccess reviews are the safety net that catches what those processes missed."
+      },
+      {
+        "title": "Least privilege and privilege creep",
+        "body": "Least privilege means each person has only the access their current job needs. Over time, moves and temporary projects add access that is never removed; this is privilege creep.\n\nUnused privileged access is the best place to start removing it: it carries the most risk and the least business impact when removed."
+      },
+      {
+        "title": "What auditors look for",
+        "body": "Controls such as NIST SP 800-53 AC-2 expect accounts to be reviewed at a defined frequency and disabled within defined periods when no longer needed. Auditors look for complete scope, named reviewers, recorded decisions, applied changes and on-time completion.\n\nGenerating evidence from system records makes all of that easy to show."
+      },
+      {
+        "title": "Service and non-human accounts",
+        "body": "Not every account belongs to a person. Service accounts, API keys and automation identities often hold broad permissions, never sign in interactively and are missing from HR data, so they slip through people-centred reviews.\n\nGive every non-human account a named owner and a purpose, review its permissions like a privileged user's, and rotate or remove credentials when the owner leaves or the system is retired."
+      }
+    ],
+    "production": [
+      {
+        "title": "Rubber-stamp reviews",
+        "body": "Long lists and \"approve all\" buttons produce reviews that change nothing. Short, explained lists and required reasons for keeping privileged access fix most of this."
+      },
+      {
+        "title": "Apps outside single sign-on",
+        "body": "Local accounts in legacy apps are invisible to the identity provider. Inventory them, give them owners and track manual removals to closure."
+      },
+      {
+        "title": "Breaking someone's work",
+        "body": "Removing access people still need causes outages and erodes trust. Use sensible defaults, let managers keep access with a reason, and make restoring access quick."
+      },
+      {
+        "title": "Silent failures",
+        "body": "API errors or partial changes leave access in place while reports say it was removed. Re-read state after every change and alert on mismatches."
+      },
+      {
+        "title": "Contractors and external users",
+        "body": "Contractors, partners and guest users are often managed outside the main HR system, so leaver detection misses them. Give external accounts an end date and a sponsor, and disable them automatically when the date passes unless the sponsor renews."
+      }
+    ],
+    "lab": {
+      "title": "Find leavers, movers and unused admin rights",
+      "intro": "Compare an identity export with an HR roster to flag leavers still active, movers with old access, orphaned accounts and long-unused privileged roles, each with a reason a manager can read. Runs offline on sample data.",
+      "dir": "labs/access-review"
+    },
+    "takeaways": [
+      "Stale and unused accounts are an easy way in for attackers using valid credentials.",
+      "Compare identity data with HR records to find leavers, movers and orphaned accounts.",
+      "Give managers short, explained lists; require reasons for keeping privileged access.",
+      "Apply changes through scoped automation, verify them and handle apps outside single sign-on.",
+      "Generate audit evidence from system records, not screenshots."
+    ],
+    "faq": [
+      {
+        "q": "How often should access be reviewed?",
+        "a": "Frameworks such as NIST SP 800-53 leave the frequency to the organisation. A common pattern is to review privileged access more often than everyday access, and to check automatically at every job change and departure."
+      },
+      {
+        "q": "Can the AI remove access without asking managers?",
+        "a": "For clear-cut cases such as accounts of people who have left according to HR, many organisations automate disabling. For everything else, a manager decides, because they know context the data does not."
+      },
+      {
+        "q": "Why disable leaver accounts instead of deleting them?",
+        "a": "Disabling blocks sign-in immediately while keeping data and logs for any investigation. Deletion can follow after a retention period."
+      },
+      {
+        "q": "Does disabling an account sign the person out everywhere?",
+        "a": "Not instantly in every app. Revoking sessions stops new tokens, but already-issued access tokens can work until they expire unless the app supports continuous access evaluation."
+      },
+      {
+        "q": "What about service accounts with no person behind them?",
+        "a": "They need a named owner and a documented purpose. The review treats an account with no HR match and no owner as orphaned, which usually means disabling it after checking nothing critical depends on it."
+      }
+    ],
+    "related": [
+      "incident-response",
+      "human-in-loop",
+      "cloud-remediation",
+      "evals"
+    ]
+  },
+  "quiz": [
+    {
+      "q": "What does comparing identity data with HR records mainly reveal?",
+      "options": [
+        "Weak passwords",
+        "Leavers still active, team movers with old access and accounts with no owner",
+        "Malware on laptops",
+        "Phishing emails"
+      ],
+      "answer": 1,
+      "explain": "HR is the independent record of who works here and in which role, so differences point to stale or excessive access."
+    },
+    {
+      "q": "What is privilege creep?",
+      "options": [
+        "Attackers slowly guessing passwords",
+        "Access building up over role changes because old access isn't removed",
+        "Admins sharing accounts",
+        "Software updates adding permissions"
+      ],
+      "answer": 1,
+      "explain": "Each move or temporary project can add access; without removal, people end up with far more than their job needs."
+    },
+    {
+      "q": "Why do managers make the final decision instead of the agent?",
+      "options": [
+        "The agent cannot read HR data",
+        "Managers know context the data doesn't, such as a contractor returning next month",
+        "Auditors forbid automation",
+        "It is faster"
+      ],
+      "answer": 1,
+      "explain": "The data shows patterns; managers know plans and exceptions. Their recorded decisions also provide accountability for audits."
+    },
+    {
+      "q": "Which is the best first target for removal?",
+      "options": [
+        "Everyday email access",
+        "Privileged roles unused for months",
+        "Recently granted access",
+        "Access used daily"
+      ],
+      "answer": 1,
+      "explain": "Unused privileged access carries high risk and low business impact when removed."
     }
   ]
 }

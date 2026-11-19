@@ -43,11 +43,16 @@ function linkTerms(text: string, linker: GlossaryLinker | undefined, key: string
   return out;
 }
 
-/** Inline text: backticks become <code>, other text gets glossary links. */
+/** Inline text: `code` becomes <code>, **bold** becomes <b>, other text gets glossary links. */
 export function Inline({ text, linker }: { text: string; linker?: GlossaryLinker }) {
   return (
     <>
-      {text.split("`").map((part, i) => (i % 2 ? <code key={i}>{part}</code> : <span key={i}>{linkTerms(part, linker, String(i))}</span>))}
+      {text.split("`").map((part, i) =>
+        i % 2 ? <code key={i}>{part}</code> : (
+          <span key={i}>
+            {part.split("**").map((seg, j) => (j % 2 ? <b key={j}>{linkTerms(seg, linker, `${i}-${j}`)}</b> : <span key={j}>{linkTerms(seg, linker, `${i}-${j}`)}</span>))}
+          </span>
+        ))}
     </>
   );
 }

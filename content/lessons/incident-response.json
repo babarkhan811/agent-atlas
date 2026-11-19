@@ -6,133 +6,270 @@
   "category": "Cybersecurity automation",
   "title": "Incident response with an AI co-pilot",
   "summary": "During an attack, an agent follows the playbook, runs the investigation and keeps the timeline while people make the calls.",
+  "seoTitle": "AI-assisted incident response for a compromised account",
+  "seoDescription": "Walk through an account-compromise incident where an AI agent scopes the damage, proposes containment, records the timeline and leaves the decisions to people.",
+  "objectives": [
+    "Follow an account-compromise playbook from the first alert to a documented post-incident report.",
+    "Explain why revoking sessions, resetting credentials and removing persistence must happen together.",
+    "Decide which incident steps an AI co-pilot may run alone and which need a named human decision."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    { "title": "NIST SP 800-61 Rev. 3: Incident Response Recommendations and Considerations for Cybersecurity Risk Management", "url": "https://csrc.nist.gov/pubs/sp/800/61/r3/final" },
+    { "title": "MITRE ATT&CK T1114.003: Email Collection, Email Forwarding Rule", "url": "https://attack.mitre.org/techniques/T1114/003/" },
+    { "title": "Microsoft Learn: Revoke user access in an emergency in Microsoft Entra ID", "url": "https://learn.microsoft.com/en-us/entra/identity/users/users-revoke-access" },
+    { "title": "Microsoft Learn: Continuous access evaluation in Microsoft Entra", "url": "https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-continuous-access-evaluation" }
+  ],
   "nodes": [
-    {
-      "id": "lead",
-      "label": "Incident lead",
-      "kind": "user",
-      "x": 9,
-      "y": 50
-    },
-    {
-      "id": "agent",
-      "label": "IR agent",
-      "kind": "app",
-      "x": 36,
-      "y": 50
-    },
-    {
-      "id": "logs",
-      "label": "Logs (SIEM)",
-      "kind": "data",
-      "x": 66,
-      "y": 12
-    },
-    {
-      "id": "idp",
-      "label": "Identity provider",
-      "kind": "tool",
-      "x": 90,
-      "y": 50
-    },
-    {
-      "id": "guard",
-      "label": "Approval gate",
-      "kind": "guard",
-      "x": 66,
-      "y": 88
-    }
+    { "id": "lead", "label": "Incident lead", "kind": "user", "x": 9, "y": 50 },
+    { "id": "agent", "label": "IR agent", "kind": "app", "x": 36, "y": 50 },
+    { "id": "logs", "label": "Logs (SIEM)", "kind": "data", "x": 66, "y": 12 },
+    { "id": "idp", "label": "Identity provider", "kind": "tool", "x": 90, "y": 50 },
+    { "id": "guard", "label": "Approval gate", "kind": "guard", "x": 66, "y": 88 }
   ],
   "steps": [
     {
-      "from": "lead",
-      "to": "agent",
-      "label": "open incident",
+      "from": "lead", "to": "agent", "label": "open incident",
       "title": "Start the playbook",
       "text": "SOAR playbooks turn response plans into steps. The agent handles the parts that need judgement and summarising.",
       "payload": [
-        [
-          "incident",
-          "\"Impossible travel login: CFO account\"",
-          ""
-        ],
-        [
-          "playbook",
-          "account-compromise v3",
-          ""
-        ]
-      ]
+        ["incident", "\"Impossible-travel sign-in: finance director account\"", "The trigger: sign-ins from two distant places too close together for one person to travel."],
+        ["playbook", "account-compromise v3", "The written, versioned plan the team agreed in advance for this incident type."],
+        ["severity", "high (provisional)", "A first guess that sets urgency; it is revised once the scope is known."],
+        ["roles", "lead: on-call manager · comms: IT director", "Who decides and who informs others. Set at the start, not in the middle of a crisis."]
+      ],
+      "depth": {
+        "beginner": "An alert says the finance director's account signed in from two countries within an hour, which no one can travel. The on-call incident lead opens an incident and starts the agreed plan for stolen accounts. An AI helper joins in. It can read logs and draft notes quickly, but the people running the incident stay in charge of every important decision.",
+        "practitioner": "Opening the incident creates a case with an ID, severity, owner and the chosen playbook. A playbook lists the steps, owners and approval points for this incident type. The AI agent is given the incident details as data, the playbook as its plan, read-only tools for investigation, and a narrow set of action tools that only work after approval. Roles are assigned up front so nobody argues about authority later.",
+        "expert": "NIST SP 800-61 Rev. 3 frames incident response as part of overall cybersecurity risk management under CSF 2.0, so playbooks should link to asset criticality, legal and communication obligations. Version playbooks like code and record which version ran. Treat the alert text as untrusted input to the agent, and give the agent a fixed output format so its notes slot into the case record."
+      },
+      "walk": {
+        "why": "A written playbook removes guesswork under pressure. The AI speeds up the reading and writing, while the plan keeps everyone working in the same order.",
+        "wrong": "Starting without roles leads to two people taking conflicting actions, or nobody taking any. Playbooks that are never rehearsed often fail on first real use.",
+        "example": "Many organisations keep separate playbooks for phishing, ransomware and account takeover, each with named owners and approval points."
+      },
+      "predict": {
+        "question": "Before anything else runs, what should the team agree on first: who can approve disruptive actions, or which logs to search?",
+        "reveal": "Who can approve. Investigation can start immediately, but containment will need a decision within minutes, and that authority must be clear before the pressure arrives."
+      }
     },
     {
-      "from": "agent",
-      "to": "logs",
-      "label": "hunt",
+      "from": "agent", "to": "logs", "label": "hunt",
       "title": "Scope the blast radius",
-      "text": "The agent writes and runs log queries: what did this account do since the suspicious login?",
+      "text": "The agent writes and runs log queries: what did this account do since the suspicious sign-in?",
       "payload": [
-        [
-          "query",
-          "sign-ins + mailbox rules + file access, last 72h",
-          ""
-        ],
-        [
-          "found",
-          "new forwarding rule to an outside address",
-          "Attackers use this to keep reading email."
-        ]
-      ]
+        ["query", "sign-ins, mailbox rules, file access for the account, last 72 h", "Covers the window before and after the alert, because the first sign of compromise is often not the first event."],
+        ["sources", "identity logs · mail audit · file sharing audit", "Each source answers a different question: who signed in, what changed, what was taken."],
+        ["access", "read-only", "Searching cannot change anything, so the agent may run it without approval."]
+      ],
+      "depth": {
+        "beginner": "Next the team needs to know how bad it is. The AI searches the central log store: where did this account sign in from, did it change any email settings, did it open or share files? Searching changes nothing, so the AI is allowed to do this on its own. It is like reviewing camera footage before deciding which doors to lock.",
+        "practitioner": "Scoping asks three questions: how did they get in, what did they do, and what else did they touch? The agent queries identity sign-in logs, mailbox audit logs and file-sharing logs for a window before and after the alert. Read-only queries run without approval. Results are attached to the case as evidence, not just summarised, so analysts can check the agent's reading.",
+        "expert": "Expose parameterised queries scoped to the incident's accounts and time window rather than free-form search over everything; it limits cost and mistakes. Check that audit logging was actually enabled and retained long enough, because missing mailbox audit data is a common blind spot. Record query text and result hashes so the timeline can be reproduced."
+      },
+      "walk": {
+        "why": "Containing too little leaves the attacker inside; containing the wrong thing disrupts the business. Scoping first makes containment precise.",
+        "wrong": "Short log retention or disabled audit settings mean the evidence simply does not exist. Agents can also misread an empty result as \"nothing happened\" when logging was off.",
+        "example": "Account-takeover investigations routinely look for new inbox rules, new MFA devices and unusual file downloads in the hours after a suspicious sign-in."
+      }
     },
     {
-      "from": "agent",
-      "to": "guard",
-      "label": "propose containment",
+      "from": "logs", "to": "agent", "label": "findings",
+      "title": "Evidence of persistence",
+      "text": "The logs show the attacker set up a way to keep reading mail even after a password reset.",
+      "payload": [
+        ["sign-in", "new country · unfamiliar device · 02:14", "The suspicious session that started the incident."],
+        ["mailbox rule", "forward all mail to an outside address (example.net)", "MITRE ATT&CK T1114.003: forwarding keeps the attacker reading mail after a password reset."],
+        ["new MFA method", "phone added 02:19", "Attackers often register their own MFA device so they can sign in again later."],
+        ["files", "no bulk downloads found", "Good news, but only as reliable as the file audit logs behind it."]
+      ],
+      "depth": {
+        "beginner": "The search finds two worrying things. The attacker created an email rule that quietly forwards every message to an outside address, and added their own phone as a second sign-in method. Both are ways to keep access even after the password is changed. Changing the password alone would not have been enough.",
+        "practitioner": "These are persistence mechanisms: changes that keep access alive after the obvious fix. An outside forwarding rule maps to MITRE ATT&CK T1114.003, and an attacker-registered MFA method lets them pass future sign-in checks. The agent lists each finding with its timestamp and source log, separates facts from inferences, and flags what remains unknown, such as whether other accounts were targeted.",
+        "expert": "Hunt for the same indicators across the tenant: other accounts with rules forwarding to the same domain, sign-ins from the same IP range or device, and OAuth app consents granted during the window, which survive password resets too. Preserve the rule definition and audit entries before deleting anything; they are evidence for the post-incident review and any legal follow-up."
+      },
+      "walk": {
+        "why": "Finding persistence before containment is what turns a quick password reset into a complete clean-up.",
+        "wrong": "Teams that reset the password and stop often find the attacker still reading mail through a rule or signing in with their own MFA device.",
+        "example": "Business email compromise cases frequently involve forwarding rules set up to watch invoices and payment conversations."
+      }
+    },
+    {
+      "from": "agent", "to": "guard", "label": "propose containment",
       "title": "Propose, don't just do",
-      "text": "Disabling a CFO's account during a deal is a business decision. Destructive or disruptive steps wait for approval.",
+      "text": "Disabling an executive's account during a deal is a business decision. Disruptive steps wait for approval.",
       "payload": [
-        [
-          "plan",
-          "revoke sessions · reset password · remove forwarding rule · require new MFA",
-          ""
-        ]
-      ]
+        ["plan", "revoke sessions · reset password · remove forwarding rule · remove unknown MFA method", "All persistence is removed together, so the attacker cannot use one route to restore another."],
+        ["risk", "disruptive (user signed out everywhere)", "Why approval is required: the person loses access to email and apps until they sign in again."],
+        ["rollback", "user re-registers MFA with IT", "How to undo or recover. Every proposal should say this."],
+        ["evidence", "rule export saved · audit entries attached", "Captured before anything is deleted."]
+      ],
+      "depth": {
+        "beginner": "The AI writes up a plan: sign the account out everywhere, change the password, delete the forwarding rule and remove the unknown phone. It does not do any of it yet. Signing a senior manager out of everything in the middle of the working day is a business decision, so a person must approve it.",
+        "practitioner": "The proposal is a structured object, not free text: each action, its risk level, its rollback and the evidence it relies on. Actions are grouped so persistence is removed at the same time; doing them one by one gives the attacker a window to react. The approval gate is code that blocks disruptive tools until a recorded decision exists for exactly these actions.",
+        "expert": "Bind the approval to the action parameters (account ID, rule ID, device ID) so an approval cannot be replayed for something else. Present the proposal with the evidence links and a time estimate. If speed matters more than precision, playbooks can pre-approve narrow emergency actions, but that decision should be made in advance, not by the agent."
+      },
+      "walk": {
+        "why": "Containment affects people and the business. A human weighs context the logs do not show, such as an executive in the middle of a negotiation.",
+        "wrong": "Agents that act first and explain later can lock out the wrong person; agents that wait for a busy channel to notice them lose time.",
+        "example": "A common rule is that automation may contain ordinary user accounts immediately but must ask before touching executive, admin or service accounts."
+      }
     },
     {
-      "from": "guard",
-      "to": "idp",
-      "label": "approved",
+      "from": "lead", "to": "guard", "label": "approve",
+      "title": "The incident lead decides",
+      "text": "A named person approves the containment plan after reviewing the evidence.",
+      "payload": [
+        ["decision", "approved", "Recorded with identity and time; this is the accountable decision."],
+        ["by", "incident lead", "The role authorised for this action in the playbook."],
+        ["note", "\"Director informed by phone; proceed now\"", "Context that only a human had, captured for the record."]
+      ],
+      "depth": {
+        "beginner": "The incident lead checks the evidence, phones the finance director to warn them, and approves the plan. The approval is saved with their name, the time and a short note. Now the actions can run.",
+        "practitioner": "A good approval screen shows what will happen, to whom, the evidence and the rollback, and lets the approver edit the scope. The note field matters: it records human context such as \"user warned\" or \"wait until after the board call\", which later reviews will need.",
+        "expert": "Watch for approval fatigue: if every incident asks for many small approvals, people start clicking without reading. Batch related actions into one decision, and measure how long approvals take, because slow approvals are a real security cost during active compromise."
+      },
+      "walk": {
+        "why": "Accountability needs a named person. The approval record shows who decided what and on which evidence.",
+        "wrong": "If approvals go to a shared chat without an owner, they can sit unanswered while the attacker keeps working.",
+        "example": "On-call rotations usually name a single incident lead per shift so approvals always have a clear owner."
+      }
+    },
+    {
+      "from": "guard", "to": "idp", "label": "contain",
       "title": "Contain",
-      "text": "",
+      "text": "Approved actions run through the identity provider and mail system.",
       "payload": [
-        [
-          "approved by",
-          "incident lead",
-          ""
-        ],
-        [
-          "result",
-          "sessions revoked · rule removed",
-          ""
-        ]
-      ]
+        ["revoke sessions", "done", "Stops new access tokens being issued. Tokens already issued can stay valid until they expire unless the app supports continuous access evaluation."],
+        ["reset password", "done", "Required, but not enough on its own."],
+        ["forwarding rule", "removed", "Closes the mail-reading persistence."],
+        ["MFA method", "attacker phone removed", "Closes the sign-in persistence."]
+      ],
+      "depth": {
+        "beginner": "The identity system signs the account out, changes the password, deletes the forwarding rule and removes the attacker's phone. One subtle point: some apps may keep working for a short while on permission slips issued before the sign-out, until those slips expire. Good playbooks know this and watch the account closely for the next hour.",
+        "practitioner": "Revoking sessions invalidates refresh tokens so no new access tokens are issued. Access tokens already issued can remain valid until they expire, often around an hour, unless the application supports continuous access evaluation, which lets it reject tokens early after critical events. So containment is followed by monitoring, and for high-risk cases by blocking sign-in temporarily.",
+        "expert": "Order matters: remove persistence (rules, MFA methods, app consents) and revoke sessions in the same window, then reset credentials. Check for OAuth application grants and app passwords that are not affected by password resets. Verify each action through the provider's audit log rather than trusting the API's success response alone."
+      },
+      "walk": {
+        "why": "Removing every persistence route together leaves the attacker no foothold to restore access from.",
+        "wrong": "Assuming \"revoke sessions\" ends access instantly. Without continuous access evaluation, existing tokens can still work for a while.",
+        "example": "Microsoft documents that revoking a user's sessions does not affect access tokens already issued, which is why emergency guides combine revocation with blocking sign-in and monitoring."
+      },
+      "predict": {
+        "question": "After sessions are revoked, can the attacker's already-open app session keep working for a while?",
+        "reveal": "It can. Revocation stops new tokens, but access tokens already issued may stay valid until they expire unless the app supports continuous access evaluation. That is why monitoring continues after containment."
+      }
     },
     {
-      "from": "agent",
-      "to": "lead",
-      "label": "timeline + report",
+      "from": "agent", "to": "lead", "label": "timeline + report",
       "title": "Document as you go",
-      "text": "The agent keeps a timestamped timeline of every finding and action, then drafts the post-incident report and lessons learned.",
+      "text": "The agent keeps a timestamped timeline of every finding and action, then drafts the post-incident report.",
       "payload": [
-        [
-          "timeline",
-          "14 events, 09:02 → 10:47",
-          ""
-        ],
-        [
-          "next",
-          "check other accounts for the same rule · train finance team",
-          ""
-        ]
-      ]
+        ["timeline", "14 events, 02:14 → 10:47 (illustrative)", "Every finding, decision and action with time and source."],
+        ["open questions", "were other accounts targeted?", "What the team still needs to check; reports should never pretend to be complete."],
+        ["next", "tenant-wide hunt for the same forwarding domain · user awareness note", "Follow-up actions with owners."],
+        ["lessons learned", "draft for review meeting", "NIST guidance treats learning from incidents as part of continuous improvement."]
+      ],
+      "depth": {
+        "beginner": "Throughout the incident the AI kept a diary of everything: what was found, who decided what, and when each action ran. At the end it drafts a report for the team's review meeting, listing open questions and next steps. People review and correct it. Next time, the plan can be improved using what was learned.",
+        "practitioner": "A timeline built from the case record is far more accurate than one reconstructed from memory days later. The agent drafts the report from structured events: detection, scope, containment, recovery, open questions and follow-up actions with owners. Humans edit it; the agent should mark anything inferred rather than observed.",
+        "expert": "Keep the raw case log immutable and generate reports from it, so the narrative can always be checked against the record. Feed confirmed outcomes back into evaluations of the agent's verdicts and into playbook updates. Check notification obligations (regulators, customers, insurers) with legal counsel; the agent can draft, but should never decide them."
+      },
+      "walk": {
+        "why": "Incidents are where organisations learn the most. Accurate records make the learning real and support any legal or regulatory follow-up.",
+        "wrong": "Reports written from memory miss steps and blur timings. An AI draft that is not reviewed can confidently include errors.",
+        "example": "Post-incident reviews commonly ask: how were we alerted, how long did each phase take, and which playbook step should change?"
+      }
+    }
+  ],
+  "article": {
+    "promise": "See how an AI co-pilot speeds up a stolen-account incident by searching, summarising and documenting, while people keep the authority to act.",
+    "thirtySeconds": [
+      "A playbook defines the steps, roles and approval points before the incident starts.",
+      "The AI agent scopes the damage with read-only searches and finds persistence such as forwarding rules and attacker MFA devices.",
+      "A named person approves containment; the agent records a timeline and drafts the post-incident report."
+    ],
+    "whyItMatters": "Account takeover is one of the most common ways attackers get into organisations, and every minute they keep access they can read mail, redirect payments or move to other systems. Incident responders lose a lot of that time searching logs and writing notes. An AI co-pilot can do much of that work quickly, but only if the playbook, the approval gate and the evidence trail are designed so that speed never replaces judgement.",
+    "analogy": "Think of a hospital emergency team. Protocols say what happens first, nurses and monitors gather information fast, and a named doctor makes the treatment decisions. The AI is the fastest nurse in the room, not the doctor.",
+    "audience": "Security analysts and incident leads, IT managers who own identity systems, and engineers automating response playbooks.",
+    "minutes": 18,
+    "prerequisites": ["human-in-loop", "soc-triage"],
+    "deepDives": [
+      {
+        "title": "Persistence: why a password reset is not enough",
+        "body": "Attackers who steal an account usually leave themselves ways back in: mailbox forwarding rules, their own MFA device, app passwords or consent granted to a malicious OAuth app. None of these depend on the password.\n\nA complete containment removes all of them in the same window and then watches the account. MITRE ATT&CK documents many of these techniques, such as T1114.003 for email forwarding rules."
+      },
+      {
+        "title": "Sessions and tokens",
+        "body": "After you sign in, apps receive short-lived access tokens and longer-lived refresh tokens. Revoking sessions invalidates the refresh tokens, so no new access tokens are issued.\n\nAccess tokens already issued can keep working until they expire unless the application supports continuous access evaluation, which lets it reject tokens early after events such as a session revocation. Plan containment with that delay in mind."
+      },
+      {
+        "title": "Incident response as risk management",
+        "body": "NIST SP 800-61 Rev. 3, published in April 2025, places incident response inside the Cybersecurity Framework 2.0: preparation, detection, response and recovery are part of everyday risk management, not a separate emergency activity.\n\nIn practice that means playbooks tied to asset importance, rehearsals, and lessons learned that change the next playbook version."
+      }
+    ],
+    "production": [
+      {
+        "title": "Missing or short-lived logs",
+        "body": "If mailbox or file audit logging was disabled or retained for only a few days, the investigation cannot answer basic questions. Check logging coverage before incidents, not during them."
+      },
+      {
+        "title": "Approval delays",
+        "body": "Disruptive actions need a human, but an approval nobody sees is a security gap. Route approvals to the named incident lead, set response expectations, and pre-approve narrow emergency actions in the playbook if the business agrees."
+      },
+      {
+        "title": "Partial containment",
+        "body": "Removing one persistence route at a time warns the attacker and gives them time to add another. Group containment actions and verify each one through audit logs."
+      },
+      {
+        "title": "Unreviewed AI reports",
+        "body": "A fluent draft can still contain wrong times or invented links between events. Generate reports from the case record, mark inferences clearly and have a person review before the report is shared."
+      }
+    ],
+    "lab": {
+      "title": "Build an incident timeline",
+      "intro": "Merge events from several log sources into one ordered timeline, flag known persistence techniques such as outside forwarding rules and new MFA methods, and list open questions. Runs offline on sample events.",
+      "dir": "labs/incident-response"
+    },
+    "takeaways": [
+      "Agree roles and approval authority before the incident, in a written playbook.",
+      "Let the AI run read-only scoping freely; keep disruptive containment behind a recorded human decision.",
+      "Find and remove all persistence together: forwarding rules, attacker MFA methods, app consents, sessions.",
+      "Revoking sessions stops new tokens, but already-issued access tokens can work until they expire.",
+      "Build the timeline as you go and review AI-drafted reports before sharing them."
+    ],
+    "faq": [
+      { "q": "Should the AI agent contain incidents automatically?", "a": "Only for narrow, pre-approved actions that the playbook allows, such as disabling an ordinary account on a high-confidence alert. Anything affecting executives, admins, servers or the wider business should wait for a named person." },
+      { "q": "Why isn't changing the password enough?", "a": "Attackers often leave other ways back in, such as forwarding rules, their own MFA device or OAuth app consents. Those keep working after a password change unless they are removed too." },
+      { "q": "What does NIST SP 800-61 Rev. 3 change?", "a": "It aligns incident response with the NIST Cybersecurity Framework 2.0 and treats it as part of overall risk management, replacing the 2012 Rev. 2 guidance." },
+      { "q": "Who writes the post-incident report?", "a": "The AI can draft it from the case record, but the incident team reviews, corrects and owns it." }
+    ],
+    "related": ["soc-triage", "human-in-loop", "software-plus-ai-agents", "observability"]
+  },
+  "quiz": [
+    {
+      "q": "The attacker created an inbox rule forwarding all mail outside the company. Why does this matter after a password reset?",
+      "options": ["It doesn't; the reset removes it", "The rule keeps sending mail to the attacker even without the password", "It blocks the password reset", "It only matters for shared mailboxes"],
+      "answer": 1,
+      "explain": "Forwarding rules (ATT&CK T1114.003) work independently of the password, so they must be removed as part of containment."
+    },
+    {
+      "q": "Which step should the AI agent be allowed to run without approval?",
+      "options": ["Revoking the director's sessions", "Removing an MFA method", "Searching sign-in and mailbox logs", "Blocking the user's sign-in"],
+      "answer": 2,
+      "explain": "Read-only searches change nothing, so they can run freely. The other actions disrupt a person and need a recorded decision."
+    },
+    {
+      "q": "Sessions were revoked a minute ago. Can an access token issued before that still work?",
+      "options": ["No, revocation is instant everywhere", "Yes, until it expires, unless the app supports continuous access evaluation", "Only if MFA is disabled", "Only on mobile devices"],
+      "answer": 1,
+      "explain": "Revocation stops new tokens. Existing access tokens can stay valid until expiry unless the resource supports continuous access evaluation."
+    },
+    {
+      "q": "Why remove all persistence mechanisms in the same window?",
+      "options": ["It is cheaper", "So the attacker cannot use one route to restore another", "Because logs only record batches", "To avoid needing approval"],
+      "answer": 1,
+      "explain": "Removing them one at a time can alert the attacker and give them time to re-establish access through a route you have not closed yet."
     }
   ]
 }

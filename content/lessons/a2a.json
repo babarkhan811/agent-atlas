@@ -1,0 +1,562 @@
+{
+  "id": "a2a",
+  "path": "knowledge-protocols",
+  "order": 6,
+  "tier": "pro",
+  "category": "Protocols",
+  "title": "A2A: Agent2Agent protocol",
+  "summary": "How one AI agent discovers another, hands it a task, and gets results back, and how that differs from MCP.",
+  "seoTitle": "A2A (Agent2Agent) protocol explained, and how it differs from MCP",
+  "seoDescription": "Follow an A2A v1.0 interaction: Agent Card discovery, SendStreamingMessage, task states, input-required follow-ups and artifacts, plus when to use A2A vs MCP.",
+  "objectives": [
+    "Explain how an A2A client discovers a remote agent through its Agent Card and what the card declares.",
+    "Trace a task through its states, including the input-required interruption and the final artifact.",
+    "Decide when a problem calls for A2A (agent to agent) and when it calls for MCP (agent to tool)."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    {
+      "title": "A2A Protocol specification (latest, v1.0)",
+      "url": "https://a2a-protocol.org/latest/specification/"
+    },
+    {
+      "title": "A2A: Life of a task",
+      "url": "https://a2a-protocol.org/latest/topics/life-of-a-task/"
+    },
+    {
+      "title": "A2A: Agent discovery",
+      "url": "https://a2a-protocol.org/latest/topics/agent-discovery/"
+    },
+    {
+      "title": "A2A blog: A new chapter for A2A, joining the Agentic AI Foundation (2026-08-27)",
+      "url": "https://a2a-protocol.org/latest/blog/2026/08/27/a-new-chapter-for-a2a-joining-the-agentic-ai-foundation/"
+    },
+    {
+      "title": "MCP specification 2026-07-28: Overview",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "user",
+      "label": "You",
+      "kind": "user",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "client",
+      "label": "Travel assistant",
+      "kind": "app",
+      "x": 34,
+      "y": 50
+    },
+    {
+      "id": "card",
+      "label": "Agent Card",
+      "kind": "data",
+      "x": 58,
+      "y": 13
+    },
+    {
+      "id": "remote",
+      "label": "Hotel agent",
+      "kind": "app",
+      "x": 80,
+      "y": 50
+    },
+    {
+      "id": "inv",
+      "label": "Inventory (MCP)",
+      "kind": "tool",
+      "x": 88,
+      "y": 86
+    }
+  ],
+  "steps": [
+    {
+      "from": "user",
+      "to": "client",
+      "label": "request",
+      "title": "A job for a specialist",
+      "text": "Your assistant can plan trips, but booking hotels is another company's agent's job.",
+      "payload": [
+        [
+          "text",
+          "\"Book a hotel in Lisbon, 12–14 March, under €180 a night\"",
+          "The goal, in plain language."
+        ],
+        [
+          "decision",
+          "delegate to a hotel agent",
+          "The assistant has no hotel inventory of its own, so it will hand off the task."
+        ]
+      ],
+      "depth": {
+        "beginner": "You ask your travel assistant to book a hotel. Your assistant is good at planning, but it doesn't run hotels. Somewhere else, a hotel company runs its own AI agent that can search rooms and make bookings. Your assistant needs a polite, standard way to ask that other agent for help, the way two companies' staff might email each other.",
+        "practitioner": "This is the situation A2A (Agent2Agent) is designed for: one agent (the client) delegates work to an independent remote agent built by someone else, possibly with a different framework and model. Each agent stays opaque; neither needs to see the other's prompts, tools or memory.",
+        "expert": "A2A started at Google in 2025, moved to the Linux Foundation, and joined the Agentic AI Foundation as a Growth Stage project in August 2026, alongside MCP. Version 1.0 is the stable specification. It defines an abstract data model with JSON-RPC, gRPC and HTTP+JSON bindings."
+      },
+      "walk": {
+        "why": "Specialised agents owned by different organisations need a shared way to cooperate without exposing their internals.",
+        "wrong": "Wiring agents together with ad-hoc APIs means custom code for every pair and no common way to handle long tasks or follow-up questions.",
+        "example": "A company's procurement agent could ask a supplier's quoting agent for a price on a bulk order, without either side revealing its internal systems."
+      }
+    },
+    {
+      "from": "client",
+      "to": "card",
+      "label": "GET agent-card.json",
+      "title": "Read the Agent Card",
+      "text": "The remote agent publishes a card describing who it is, what it can do, where to reach it and how to authenticate.",
+      "payload": [
+        [
+          "url",
+          "https://hotels.example.com/.well-known/agent-card.json",
+          "The standard well-known location; registries and direct configuration also work."
+        ],
+        [
+          "name · description",
+          "\"Hotel booking agent\" · \"Searches and books rooms\"",
+          "Identity shown to people and used by the client agent to decide."
+        ],
+        [
+          "supportedInterfaces",
+          "[{ url: \"https://hotels.example.com/a2a\", protocolBinding: \"JSONRPC\", protocolVersion: \"1.0\" }]",
+          "Where and how to talk to it. Bindings can be JSON-RPC, gRPC or HTTP+JSON."
+        ],
+        [
+          "capabilities",
+          "{ streaming: true, pushNotifications: true }",
+          "Optional features this agent supports."
+        ],
+        [
+          "skills[0]",
+          "{ id: \"book-hotel\", name: \"Book a hotel\", tags: [\"travel\"], examples: [\"Book a room in Rome…\"] }",
+          "What the agent can do, described for discovery."
+        ],
+        [
+          "securitySchemes",
+          "{ oauth: { type: OAuth2, … } }",
+          "How clients must authenticate, using familiar schemes such as OAuth 2.0 or API keys."
+        ]
+      ],
+      "predict": {
+        "question": "How does the travel assistant learn what the hotel agent can do and how to call it, without custom integration code?",
+        "reveal": "From the Agent Card, a JSON document usually served at `/.well-known/agent-card.json`. It lists the agent's skills, endpoint and protocol binding, optional capabilities and authentication requirements."
+      },
+      "depth": {
+        "beginner": "Before calling, your assistant reads the hotel agent's business card, a small public file at a standard web address. It says: \"I'm the hotel booking agent, I can search and book rooms, reach me at this address, and here's how to prove who you are.\" Now your assistant knows whom it is dealing with.",
+        "practitioner": "The Agent Card is A2A's discovery document. It describes identity, `supportedInterfaces` (URL plus protocol binding), `capabilities` such as streaming and push notifications, `skills` with examples, default input and output media types, and `securitySchemes`. Discovery can use the well-known URI, a curated registry, or direct configuration.",
+        "expert": "Cards may be signed, and an authenticated extended card can expose more detail via `GetExtendedAgentCard`. Treat card content as untrusted until the server's identity is verified (TLS at minimum). The spec does not define a standard registry API, so enterprise registries are implementation choices."
+      },
+      "walk": {
+        "why": "Self-describing agents can be found and used at runtime, which is what makes a marketplace of interoperable agents possible.",
+        "wrong": "Trusting any card found online lets impostor agents collect your users' requests. Verify the domain and authentication before delegating anything sensitive.",
+        "example": "An internal company registry lists approved agents' cards, so employees' assistants can only delegate to vetted agents."
+      }
+    },
+    {
+      "from": "client",
+      "to": "remote",
+      "label": "SendStreamingMessage",
+      "title": "Send the request as a message",
+      "text": "The client sends a message to the remote agent and asks for streamed updates.",
+      "payload": [
+        [
+          "method",
+          "\"SendStreamingMessage\"",
+          "JSON-RPC method in A2A v1.0. `SendMessage` is the non-streaming form."
+        ],
+        [
+          "A2A-Version",
+          "1.0",
+          "Header naming the protocol version the client speaks."
+        ],
+        [
+          "Authorization",
+          "Bearer eyJ…",
+          "Credentials obtained according to the card's security scheme."
+        ],
+        [
+          "params.message.messageId",
+          "\"msg-001\"",
+          "Unique id for this message."
+        ],
+        [
+          "params.message.role",
+          "\"ROLE_USER\"",
+          "Sent by the client side. Replies from the remote agent use ROLE_AGENT."
+        ],
+        [
+          "params.message.parts",
+          "[{ text: \"Book a hotel in Lisbon, 12–14 March, under €180 a night\" }]",
+          "Content as parts: text, raw bytes, a URL or structured data."
+        ],
+        [
+          "params.configuration.acceptedOutputModes",
+          "[\"application/json\", \"text/plain\"]",
+          "Media types the client can handle in the response."
+        ]
+      ],
+      "depth": {
+        "beginner": "Your assistant sends the hotel agent a message containing your request, plus its credentials. It also says: \"Please keep me posted as you work.\" From here on, the two agents talk like colleagues: messages, updates and finally a result. It shares only what the hotel agent needs: the city, dates and budget.",
+        "practitioner": "A2A v1.0 defines operations such as `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask` and `SubscribeToTask`. A message has a `messageId`, a `role` and `parts`; parts carry text, raw bytes, a URL or JSON data. The streaming variant returns a stream of task snapshots, status updates and artifact updates.",
+        "expert": "The non-streaming `SendMessage` waits for a terminal or interrupted state by default; setting `returnImmediately` in the configuration returns as soon as a task exists. Over the HTTP+JSON binding the same operations are `POST /message:send` and `POST /message:stream`. For very long jobs, push notification configs let the remote agent POST updates to a webhook instead of holding a stream open."
+      },
+      "walk": {
+        "why": "Messages and parts are flexible enough for chat-style requests, files and structured data alike.",
+        "wrong": "Sending more context than needed, such as your whole travel history, leaks data to a third party. Share only what the task requires.",
+        "example": "A recruiting assistant sends a scheduling agent only the candidate's available time slots, not the full CV."
+      }
+    },
+    {
+      "from": "remote",
+      "to": "client",
+      "label": "task: WORKING",
+      "title": "The remote agent opens a task",
+      "text": "Because the job takes time, the hotel agent creates a task and streams its progress.",
+      "payload": [
+        [
+          "task.id",
+          "\"task-7f2\"",
+          "Identifies this unit of work for follow-ups, status checks and cancellation."
+        ],
+        [
+          "task.contextId",
+          "\"ctx-lisbon-trip\"",
+          "Groups related tasks and messages in one conversation."
+        ],
+        [
+          "statusUpdate.status.state",
+          "\"TASK_STATE_WORKING\"",
+          "The task is being processed."
+        ],
+        [
+          "note",
+          "a simple question could get a direct Message instead",
+          "Agents may answer small requests with a Message and no task."
+        ]
+      ],
+      "depth": {
+        "beginner": "The hotel agent replies: \"Got it, I've opened a job for this, number 7f2, and I'm working on it.\" Having a job number means your assistant can check on it, add details or cancel it later, like a support ticket.",
+        "practitioner": "Agents may reply with a direct `Message` for quick, self-contained answers, or create a `Task` for tracked work. A task has an `id`, a `contextId`, a `status` (state, optional message, timestamp), `artifacts` and optional `history`. Streams carry `statusUpdate` and `artifactUpdate` events, delivered in order.",
+        "expert": "Task states in v1.0 are `TASK_STATE_SUBMITTED`, `WORKING`, `INPUT_REQUIRED`, `AUTH_REQUIRED`, `COMPLETED`, `FAILED`, `CANCELED` and `REJECTED` (each prefixed `TASK_STATE_`). Completed, failed, canceled and rejected are terminal; input-required and auth-required are interrupted states that wait for the client. Clients should handle every state, including `REJECTED` (the agent declined the task) and `AUTH_REQUIRED` (it needs extra credentials), rather than only the happy path."
+      },
+      "walk": {
+        "why": "Long-running work needs an identifier and a lifecycle, so clients can track progress across minutes or hours.",
+        "wrong": "Clients that assume an instant answer time out on real tasks; clients that never cancel abandoned tasks leave work running on the remote side.",
+        "example": "A document-translation agent opens a task for a 200-page contract and streams progress while it works through the chapters."
+      }
+    },
+    {
+      "from": "remote",
+      "to": "inv",
+      "label": "tools/call (MCP)",
+      "title": "Inside, the hotel agent uses MCP",
+      "text": "To search rooms, the hotel agent calls its own tools. This happens behind the scenes, invisible to the client.",
+      "payload": [
+        [
+          "protocol",
+          "MCP tools/call",
+          "Agent-to-tool. A2A covers agent-to-agent; MCP covers agent-to-tool."
+        ],
+        [
+          "tool",
+          "search_rooms(city: \"Lisbon\", max_price_eur: 180, dates: \"12–14 Mar\")",
+          "An internal tool on the hotel company's own MCP server."
+        ],
+        [
+          "visibility",
+          "opaque to the travel assistant",
+          "The client sees only the task's status and results, not internal tools."
+        ]
+      ],
+      "predict": {
+        "question": "Can the travel assistant see which tools or databases the hotel agent uses?",
+        "reveal": "No. A2A agents are opaque: they share messages, task status and artifacts, not their internal tools, prompts or memory. Internally, the hotel agent may well use MCP to reach its systems."
+      },
+      "depth": {
+        "beginner": "The hotel agent now searches its own room database using its own tools. Your assistant can't see any of this, just as you can't see a hotel's internal booking screen when you ring reception. You only hear the outcome. What matters to your assistant is only whether the job gets done well.",
+        "practitioner": "This is the clearest way to see the difference between the two protocols. MCP connects an agent to tools and data (vertical integration). A2A connects independent agents as peers (horizontal collaboration). A remote A2A agent commonly uses MCP internally to do the delegated work.",
+        "expert": "Opacity is a feature for privacy and intellectual property but a challenge for trust: the client cannot inspect how a result was produced. Mitigate with signed cards, contractual controls, scoped credentials, and verifying important outputs independently. Your agreement with the remote agent's owner, not the protocol, decides what they may do with your data."
+      },
+      "walk": {
+        "why": "Keeping internals private lets organisations expose capabilities without exposing their systems or prompts.",
+        "wrong": "Assuming a remote agent applies your own safety policies is a mistake; it applies its owner's policies.",
+        "example": "A bank's assistant delegates a currency question to a partner's agent, which internally queries its own pricing systems through MCP."
+      }
+    },
+    {
+      "from": "remote",
+      "to": "client",
+      "label": "INPUT_REQUIRED",
+      "title": "The agent needs a decision",
+      "text": "The hotel agent found two good options and pauses the task to ask which one.",
+      "payload": [
+        [
+          "statusUpdate.status.state",
+          "\"TASK_STATE_INPUT_REQUIRED\"",
+          "An interrupted state: the task waits for the client."
+        ],
+        [
+          "status.message.role",
+          "\"ROLE_AGENT\"",
+          "A message from the remote agent explaining what it needs."
+        ],
+        [
+          "status.message.parts",
+          "[{ text: \"Option A: €165, city centre. Option B: €172, sea view. Which one?\" }]",
+          "The clarifying question, with the choices."
+        ]
+      ],
+      "depth": {
+        "beginner": "The hotel agent finds two rooms within budget and asks: \"Option A in the city centre, or option B with a sea view?\" The job is paused, not failed. Your assistant can decide itself if you told it your preference, or ask you.",
+        "practitioner": "`TASK_STATE_INPUT_REQUIRED` pauses the task until the client replies. The client continues the same task by sending a new message with the same `taskId` and `contextId`. `TASK_STATE_AUTH_REQUIRED` works similarly when extra authorization is needed. The status message explains what is needed, so the client can answer itself or pass the question to the user.",
+        "expert": "Clients should set policies for which interruptions they may answer automatically and which must reach a human, for example anything that commits money. Keep an eye on loops: two agents repeatedly asking each other for clarification is a known failure mode."
+      },
+      "walk": {
+        "why": "Real tasks often need a decision mid-way; a standard interruption state avoids failing and restarting the whole job.",
+        "wrong": "Assistants that answer every input request themselves can make choices the user never agreed to, such as spending more money.",
+        "example": "A procurement agent pauses an order to ask whether a slightly later delivery date is acceptable before confirming with the supplier."
+      }
+    },
+    {
+      "from": "client",
+      "to": "remote",
+      "label": "reply (same taskId)",
+      "title": "Answer and continue the task",
+      "text": "Your assistant replies with your choice, linked to the same task and context.",
+      "payload": [
+        [
+          "method",
+          "\"SendStreamingMessage\"",
+          "Same operation; the ids link it to the paused task."
+        ],
+        [
+          "params.message.taskId",
+          "\"task-7f2\"",
+          "Continues this task rather than starting a new one."
+        ],
+        [
+          "params.message.contextId",
+          "\"ctx-lisbon-trip\"",
+          "Keeps the conversation together."
+        ],
+        [
+          "params.message.parts",
+          "[{ text: \"Option B, please\" }]",
+          "The decision you gave your assistant."
+        ]
+      ],
+      "depth": {
+        "beginner": "Your assistant asks you, you pick the sea view, and it passes your answer back, quoting the job number so the hotel agent knows which booking this is about. The paused job starts moving again. If you take too long, the hotel agent may cancel the job, so assistants should tell you when a decision is waiting.",
+        "practitioner": "Follow-ups reuse `taskId` (to continue a specific task) and `contextId` (to group related interactions). Once a task reaches a terminal state it cannot restart; a refinement such as \"change it to two nights\" becomes a new task in the same context that points back with `referenceTaskIds`.",
+        "expert": "Record the human decision and who made it in your own logs, because the remote agent's records belong to someone else. If the stream drops, `SubscribeToTask` or `GetTask` lets the client resume watching an existing task. Answers that commit money or personal data should carry an explicit human approval on your side."
+      },
+      "walk": {
+        "why": "Ids make multi-turn collaboration reliable even when many tasks run at once.",
+        "wrong": "Losing the task id after a crash leaves orphaned tasks; persist ids before waiting on long streams.",
+        "example": "A travel assistant juggling flights, hotels and car hire tracks a separate task id with each provider's agent under one trip context."
+      }
+    },
+    {
+      "from": "remote",
+      "to": "client",
+      "label": "artifact + COMPLETED",
+      "title": "The result arrives as an artifact",
+      "text": "The hotel agent returns the booking confirmation as an artifact and marks the task completed.",
+      "payload": [
+        [
+          "artifactUpdate.artifact.artifactId",
+          "\"art-1\"",
+          "Unique within the task."
+        ],
+        [
+          "artifact.name",
+          "\"booking-confirmation\"",
+          "Refined versions should reuse the same name so clients can track them."
+        ],
+        [
+          "artifact.parts",
+          "[{ data: { hotel: \"Mar Azul\", nights: 2, total_eur: 344, ref: \"MA-55120\" } }]",
+          "Structured data the client can use directly, alongside or instead of text."
+        ],
+        [
+          "statusUpdate.status.state",
+          "\"TASK_STATE_COMPLETED\"",
+          "Terminal state: the task is finished and immutable."
+        ]
+      ],
+      "depth": {
+        "beginner": "The hotel agent sends back the result: a neat confirmation with the hotel name, number of nights, total price and booking reference, then marks the job done. Your assistant can now show it to you or add it to your trip calendar.",
+        "practitioner": "Outputs are delivered as artifacts, each with an `artifactId`, optional `name` and `description`, and `parts`. Large artifacts can stream in chunks using `append` and `lastChunk`. The final status update marks the task `COMPLETED`; from then on it cannot change. Clients usually store artifacts with the task id so later refinements can be compared with the original.",
+        "expert": "Validate structured artifacts against what you expect before acting on them, as you would any third-party input. Artifacts are also a prompt-injection channel when the client agent feeds them to its own model, so label them as untrusted data. Keep your own copy of important artifacts, since the remote agent decides how long it retains tasks."
+      },
+      "walk": {
+        "why": "Separating results (artifacts) from chatter (messages) makes outputs easy to store, verify and reuse.",
+        "wrong": "Treating a partner agent's artifact as trusted instructions can let a compromised partner steer your assistant.",
+        "example": "A legal assistant receives a translated contract as a file artifact plus a structured summary, and files both with the matter."
+      }
+    },
+    {
+      "from": "client",
+      "to": "user",
+      "label": "confirmation",
+      "title": "You get the booking",
+      "text": "The assistant reports the outcome and keeps the reference for later changes.",
+      "payload": [
+        [
+          "text",
+          "\"Booked Mar Azul, 12–14 March, sea view, €344 total (ref MA-55120).\"",
+          "Summary for you, built from the artifact."
+        ],
+        [
+          "kept",
+          "taskId · contextId · artifact",
+          "Stored so changes can reference the original booking."
+        ]
+      ],
+      "depth": {
+        "beginner": "You see a simple message: booked, sea view, €344, reference MA-55120. Behind it, two AI agents from different companies cooperated through a shared protocol, with a pause for your decision in the middle. If you want to change the booking later, your assistant still has everything it needs to ask.",
+        "practitioner": "The client agent turns the artifact into a user-facing answer and stores the identifiers. If you later ask to add a night, it sends a new message in the same context with `referenceTaskIds` pointing to the completed task. The same pattern repeats for every partner agent the assistant works with.",
+        "expert": "Across many agents, observability matters: propagate trace identifiers, log every delegation with the agent card's identity and version, and measure task success, latency and cost per partner agent. Review which partner agents receive personal data, and set alerts when a partner's task failure rate or response time changes sharply."
+      },
+      "walk": {
+        "why": "Standard ids and artifacts make the whole multi-agent exchange auditable from the client's side.",
+        "wrong": "Without stored references, later changes start from scratch and can create duplicate bookings.",
+        "example": "An expense assistant attaches the booking artifact to the trip's expense report automatically."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Learn how independent AI agents find each other, hand off tasks, ask follow-up questions and return results with the A2A v1.0 protocol, and when to use it instead of MCP.",
+    "thirtySeconds": [
+      "A remote agent publishes an Agent Card describing its skills, endpoint, capabilities and required authentication.",
+      "A client agent sends messages; the remote agent answers directly or opens a task that moves through states such as working, input-required and completed.",
+      "Results come back as artifacts. MCP connects an agent to its tools; A2A connects agents to each other."
+    ],
+    "whyItMatters": "As more organisations run their own AI agents, the useful work increasingly spans several of them: your assistant, a supplier's quoting agent, an airline's booking agent. Without a common protocol, every pair needs custom integration. A2A gives agents a shared way to discover each other and cooperate on long-running tasks while keeping their internals private, which matters for privacy, intellectual property and security.",
+    "analogy": "MCP is like giving one employee a set of tools and keys. A2A is like that employee emailing a specialist at another company: they never touch each other's tools, they agree on a job number, ask questions when needed, and send back a finished document.",
+    "audience": "Developers building multi-agent systems, architects deciding between MCP and A2A, and security teams assessing agents that delegate work across organisations.",
+    "minutes": 18,
+    "prerequisites": [
+      "mcp",
+      "multi-agent"
+    ],
+    "deepDives": [
+      {
+        "title": "A2A vs MCP: when to use which",
+        "body": "Use MCP when an agent needs a capability: call an API, read a database, run a function. The server exposes tools with schemas, and the agent stays in control.\n\nUse A2A when you want to delegate a goal to another agent that decides for itself how to achieve it, possibly over a long time and with follow-up questions. Many systems use both: an agent receives a task over A2A and uses MCP internally to do the work. The A2A specification and the Agentic AI Foundation describe the two as complementary."
+      },
+      {
+        "title": "Tasks, messages and artifacts",
+        "body": "A message is one turn in a conversation, made of parts (text, raw bytes, a URL or JSON data). A task is a tracked unit of work with an id, a context id, a status and outputs. Artifacts are the outputs, also made of parts.\n\nSimple requests can be answered with a single message. Anything long-running or needing follow-ups gets a task, and completed tasks are immutable: changes start a new task that references the old one."
+      },
+      {
+        "title": "Governance and versions",
+        "body": "A2A was introduced by Google in 2025 and moved to the Linux Foundation. Version 1.0 is the stable specification, and in August 2026 the project joined the Agentic AI Foundation as a Growth Stage project alongside MCP.\n\nClients declare the version they speak with an `A2A-Version` header; check the version your partner agents support before relying on newer features."
+      }
+    ],
+    "production": [
+      {
+        "title": "Impostor or untrusted agents",
+        "body": "Anyone can publish an Agent Card. Verify the domain over TLS, prefer signed cards and curated registries, and delegate sensitive work only to approved agents."
+      },
+      {
+        "title": "Data over-sharing",
+        "body": "Messages go to another organisation. Send only what the task needs, check data-processing agreements, and keep personal data out of free text where structured fields will do."
+      },
+      {
+        "title": "Runaway delegation and loops",
+        "body": "Agents can ask each other for clarification in circles or spawn chains of delegation. Set limits on depth, time and cost per task, and cancel tasks you no longer need."
+      },
+      {
+        "title": "Results as an injection channel",
+        "body": "Artifacts and agent messages are untrusted input to your own model. Label them as data, validate structured parts against expected shapes, and never let them unlock new tools."
+      }
+    ],
+    "lab": {
+      "title": "A2A task lifecycle and Agent Card checks",
+      "intro": "Implement a small A2A-style task state machine (submitted, working, input-required, completed and friends, with terminal states that cannot change), an Agent Card validator for the fields this lesson uses, and a helper that picks a supported interface. Runs offline in Python and TypeScript with tests.",
+      "dir": "labs/a2a"
+    },
+    "takeaways": [
+      "A2A lets independent agents cooperate without sharing their internal tools, prompts or memory.",
+      "Discovery starts with the Agent Card, usually at `/.well-known/agent-card.json`.",
+      "Work is tracked as tasks with states; input-required pauses a task until the client replies with the same task id.",
+      "Results are artifacts made of parts; completed tasks are immutable, so changes start a new task.",
+      "Use MCP for agent-to-tool access and A2A for agent-to-agent delegation; many systems use both."
+    ],
+    "faq": [
+      {
+        "q": "Does A2A replace MCP?",
+        "a": "No. They solve different problems. MCP connects an agent to tools and data; A2A connects agents to each other. A remote A2A agent often uses MCP internally."
+      },
+      {
+        "q": "Which version should I build against?",
+        "a": "A2A v1.0 is the stable specification as of November 2026. It uses names such as `SendMessage` and `TASK_STATE_COMPLETED`; earlier 0.x versions used different method and field names, so check what partner agents support."
+      },
+      {
+        "q": "How do agents authenticate to each other?",
+        "a": "The Agent Card declares security schemes such as OAuth 2.0, OpenID Connect, API keys or mutual TLS, and the client obtains credentials accordingly and sends them with each request."
+      },
+      {
+        "q": "Who governs A2A?",
+        "a": "A2A is an open project under the Linux Foundation. In August 2026 it joined the Agentic AI Foundation, which also hosts MCP."
+      }
+    ],
+    "related": [
+      "mcp",
+      "mcp-remote",
+      "multi-agent",
+      "human-in-loop"
+    ]
+  },
+  "quiz": [
+    {
+      "q": "Where does an A2A client usually find a remote agent's Agent Card?",
+      "options": [
+        "In the model's training data",
+        "At /.well-known/agent-card.json on the agent's domain",
+        "Inside an MCP tools/list response",
+        "In the task artifact"
+      ],
+      "answer": 1,
+      "explain": "The well-known URI is the standard location; registries and direct configuration are alternatives."
+    },
+    {
+      "q": "The remote agent needs the user to choose between two options. Which task state does it use?",
+      "options": [
+        "TASK_STATE_FAILED",
+        "TASK_STATE_INPUT_REQUIRED",
+        "TASK_STATE_COMPLETED",
+        "TASK_STATE_REJECTED"
+      ],
+      "answer": 1,
+      "explain": "Input-required is an interrupted state: the task waits until the client replies with the same task id."
+    },
+    {
+      "q": "Which statement best describes MCP vs A2A?",
+      "options": [
+        "They are competing versions of the same protocol",
+        "MCP connects agents to tools; A2A connects agents to agents",
+        "A2A is only for Google models",
+        "MCP is for streaming; A2A is not"
+      ],
+      "answer": 1,
+      "explain": "MCP is agent-to-tool integration; A2A is peer collaboration between independent agents. They are complementary."
+    },
+    {
+      "q": "A completed booking task needs a change. What happens?",
+      "options": [
+        "The same task restarts",
+        "A new task is created that references the original with referenceTaskIds",
+        "The artifact is edited in place",
+        "The context is deleted"
+      ],
+      "answer": 1,
+      "explain": "Terminal tasks are immutable. Refinements start a new task in the same context that points back to the original."
+    }
+  ]
+}

@@ -48,7 +48,10 @@ test("unknown lessons get a real 404", async ({ page }) => {
 test("guide and glossary render", async ({ page }) => {
   await page.goto("/guide/");
   await expect(page.locator("h1")).toContainText("automate cybersecurity");
-  await expect(page.locator(".guide section")).toHaveCount(9);
+  await expect(page.locator(".guide-index li")).toHaveCount(9);
+  await page.locator(".guide-index a").nth(2).click();
+  await expect(page.locator("h1")).toHaveText("Reference architecture");
   await page.goto("/glossary/");
-  await expect(page.locator(".gloss > div")).toHaveCount(30);
+  const terms = JSON.parse(fs.readFileSync(path.join(process.cwd(), "content/glossary.json"), "utf8"));
+  await expect(page.locator(".gloss > div")).toHaveCount(terms.length);
 });

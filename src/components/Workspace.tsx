@@ -8,7 +8,8 @@ import { Sequence } from "@/sim/Sequence";
 import { KIND_INFO, approxBytes, fmtSeconds, stepTimes } from "@/sim/layout";
 import { GOTO_EVENT } from "./ArticleWidgets";
 import { Prose } from "./Prose";
-import { CATS, Shell, catInfo } from "./Shell";
+import { CATS, catInfo } from "@/lib/cats";
+import { Shell } from "./Shell";
 
 type View = "diagram" | "sequence";
 export type Depth = "beginner" | "practitioner" | "expert";
@@ -31,6 +32,8 @@ export function Workspace({ lesson, index }: Props) {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [depth, setDepth] = useState<Depth>("practitioner");
+  // Steps whose "predict, then reveal" answer has been shown.
+  const [revealed, setRevealed] = useState<Set<number>>(() => new Set());
   const hasDepth = lesson.steps.every((x) => x.depth);
   const ready = useRef(false);
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
@@ -67,9 +70,14 @@ export function Workspace({ lesson, index }: Props) {
 
   useEffect(() => {
     if (!playing) return;
-    const t = setTimeout(() => (step < n - 1 ? setStep(step + 1) : setPlaying(false)), STEP_HOLD_MS / speed);
+    const t = setTimeout(() => {
+      if (step >= n - 1) return setPlaying(false);
+      setStep(step + 1);
+      // Autoplay pauses on a prediction so the learner can think first.
+      if (lesson.steps[step + 1]?.predict && !revealed.has(step + 1)) setPlaying(false);
+    }, STEP_HOLD_MS / speed);
     return () => clearTimeout(t);
-  }, [playing, step, speed, n, setStep]);
+  }, [playing, step, speed, n, setStep, lesson.steps, revealed]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -190,6 +198,14 @@ export function Workspace({ lesson, index }: Props) {
             <span className="chip" style={{ ["--c" as string]: `var(--k-${B.kind})` }}>{B.label}</span>
           </div>
           <h3>{s.title}</h3>
+          {s.predict && (
+            <div className="predict">
+              <p className="predict-q"><b>Predict:</b> {s.predict.question}</p>
+              {revealed.has(step)
+                ? <div className="predict-a" aria-live="polite"><Prose text={s.predict.reveal} /></div>
+                : <button type="button" className="ctl" onClick={() => setRevealed((r) => new Set(r).add(step))}>Reveal answer</button>}
+            </div>
+          )}
           {s.depth ? <div className="narr"><Prose text={s.depth[depth]} /></div> : s.text && <p>{s.text}</p>}
           {depth === "beginner" && hasDepth ? (
             <p className="hint">Switch to <button type="button" className="linkish" onClick={() => setDepth("practitioner")}>Practitioner</button> to see every field in this message.</p>

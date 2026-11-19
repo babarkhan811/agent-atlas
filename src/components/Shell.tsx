@@ -6,18 +6,8 @@ import { BASE_PATH } from "@/lib/site";
 import { searchLessons, searchTerms, type LessonHit, type SearchIndex } from "@/lib/search";
 import { ThemeToggle } from "./ThemeToggle";
 
-// [category, short tab name, stack-layer name]
-export const CATS = [
-  ["Foundations", "Basics", "Model"],
-  ["Knowledge", "Knowledge", "Context"],
-  ["Protocols", "Protocols", "Protocols"],
-  ["Agents", "Agents", "Agents"],
-  ["Automation", "Automation", "Automation"],
-  ["Cybersecurity automation", "Security", "Security"],
-  ["Safety", "Safety", "Safety"],
-  ["Production", "Ops", "Ops"],
-] as const;
-export const catInfo = (c: string) => CATS.find((x) => x[0] === c) ?? CATS[0];
+import { CATS, catInfo } from "@/lib/cats";
+export { CATS, catInfo };
 
 type Props = {
   index: LessonIndexItem[];
@@ -123,6 +113,7 @@ export function Shell({ index, active, step = 0, onStep, pageMode = false, child
                 value={q} onChange={(e) => setQ(e.target.value)} />
               <kbd aria-hidden="true">{mac ? "⌘K" : "Ctrl K"}</kbd>
             </div>
+            <Link className="toplink" href="/learn/">Learn</Link>
             <Link className="toplink" href="/guide/">Build guide</Link>
             <Link className="toplink" href="/glossary/">Glossary</Link>
             <ThemeToggle />

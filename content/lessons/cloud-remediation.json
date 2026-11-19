@@ -6,6 +6,36 @@
   "category": "Cybersecurity automation",
   "title": "Auto-fixing cloud misconfigurations",
   "summary": "Most cloud breaches start with a setting left open. An agent finds them and fixes them the safe way: in code.",
+  "seoTitle": "Fixing public cloud storage with an AI remediation agent",
+  "seoDescription": "Follow an agent that finds a publicly readable storage bucket, checks context, fixes it in infrastructure-as-code, gets the owner's approval and verifies the result.",
+  "objectives": [
+    "Describe how cloud storage becomes public and which built-in controls block it on AWS, Azure and Google Cloud.",
+    "Explain why misconfigurations should be fixed in infrastructure-as-code rather than by clicking in a console.",
+    "Design an approval and verification flow so automated fixes do not break legitimate public content."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    {
+      "title": "AWS: Blocking public access to your Amazon S3 storage",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html"
+    },
+    {
+      "title": "Microsoft Learn: Remediate anonymous read access to blob data",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/anonymous-read-access-prevent"
+    },
+    {
+      "title": "Google Cloud: Public access prevention for Cloud Storage",
+      "url": "https://docs.cloud.google.com/storage/docs/public-access-prevention"
+    },
+    {
+      "title": "AWS: Configuring block public access settings for your S3 buckets",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/configuring-block-public-access-bucket.html"
+    },
+    {
+      "title": "Terraform AWS provider: aws_s3_bucket_public_access_block",
+      "url": "https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_public_access_block"
+    }
+  ],
   "nodes": [
     {
       "id": "scan",
@@ -49,105 +79,408 @@
       "to": "agent",
       "label": "finding",
       "title": "The scanner flags a risky setting",
-      "text": "Security posture tools check every cloud resource against best-practice rules, continuously.",
+      "text": "Cloud security posture tools check every resource against best-practice rules, continuously.",
       "payload": [
         [
           "resource",
           "storage bucket \"customer-exports\"",
-          ""
+          "The object store holding files; the name hints at sensitive content."
         ],
         [
           "issue",
-          "publicly readable",
-          "Anyone with the link can download the files."
+          "publicly readable via bucket policy",
+          "A policy grants read access to everyone (Principal \"*\"), so anyone with the link can download."
+        ],
+        [
+          "account guard",
+          "Block Public Access: off for this bucket",
+          "The built-in safety switch that would override the public policy is disabled."
         ],
         [
           "severity",
           "critical",
-          ""
+          "Public exposure of possibly personal data scores high in most posture tools."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "A cloud scanner checks every storage folder, server and network setting against a list of good practices, all day long. It finds a storage bucket called \"customer-exports\" that anyone on the internet can read. The built-in safety switch that blocks public access was turned off for this bucket. The scanner sends the finding to the remediation agent.",
+        "practitioner": "Posture management tools evaluate cloud resources against rules, often mapped to benchmarks. Storage becomes public through access control lists or resource policies that grant access to everyone. AWS S3 Block Public Access provides four settings that override those grants; when they are disabled on a bucket, a public policy takes effect. The finding includes the resource, the rule and the evidence.",
+        "expert": "Distinguish \"publicly readable\" from \"public by design\": static websites and public datasets are legitimate. Findings should carry the effective permission, not just the raw policy, because account- or organisation-level controls can already block access. On AWS, S3 applies the most restrictive combination of organisation, account, bucket and access point settings."
+      },
+      "walk": {
+        "why": "Cloud accounts change constantly. Continuous scanning catches risky settings minutes after they appear instead of at the next audit.",
+        "wrong": "Scanners that report raw policies without effective permissions create false alarms when account-level blocks already prevent access.",
+        "example": "Because exposed storage is such a common mistake, all major clouds now offer account- or organisation-wide controls that block public access."
+      }
     },
     {
       "from": "agent",
       "to": "cloud",
       "label": "inspect",
       "title": "Check context before acting",
-      "text": "Not every public bucket is a mistake; website assets are meant to be public. The agent checks tags, contents and recent access first.",
+      "text": "Not every public bucket is a mistake. The agent checks tags, contents and recent access first.",
       "payload": [
         [
           "tags",
-          "{ team: \"data\", env: \"prod\" }",
-          ""
+          "{ team: \"data\", env: \"prod\", owner: \"r.malik\" }",
+          "Who owns it and whether it is production. Owner tags make routing possible."
         ],
         [
           "contents",
           "CSV files named orders_*.csv",
-          "Looks like customer data, not website files."
+          "Looks like customer order data, not website images."
         ],
         [
           "public reads",
-          "0 in the last 30 days",
-          "Probably not exposed yet."
+          "0 in the last 30 days (access logs)",
+          "Probably not yet accessed by outsiders, but only as reliable as the logging."
+        ],
+        [
+          "purpose flag",
+          "none",
+          "No record that this bucket is meant to be public."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Some buckets are meant to be public, like one holding a company website's pictures. So before fixing anything, the agent looks closer: who owns this bucket, what kind of files are inside, and has anyone outside actually downloaded them? The files look like customer orders, the owner is the data team, and nobody seems to have downloaded them yet.",
+        "practitioner": "The agent reads tags, object names (not contents, unless policy allows), access logs and any record of approved public resources. Context decides the action: an intended public website needs no change; customer data needs closing now. Access logs show whether exposure was exploited, which matters for incident and breach decisions.",
+        "expert": "Limit the agent's read scope: listing object names is usually enough to classify; reading object contents may itself be a privacy issue. Check whether server access logging or data-event logging was enabled, because \"zero reads\" means nothing without logs. If logs show outside downloads, hand over to incident response instead of quietly fixing."
+      },
+      "walk": {
+        "why": "Context prevents breaking legitimate public content and spots when an exposure has become an incident.",
+        "wrong": "Blindly closing every public bucket can take a company website offline; ignoring access logs can hide a breach.",
+        "example": "Many teams keep an allow-list of intentionally public buckets, so automation can skip them and alert on everything else."
+      },
+      "predict": {
+        "question": "The access logs show zero outside reads in 30 days. Is it safe to say the data was never exposed?",
+        "reveal": "Only if logging was enabled for the whole period. Zero reads in an empty log proves nothing, so the agent checks logging coverage before drawing conclusions."
+      }
+    },
+    {
+      "from": "cloud",
+      "to": "agent",
+      "label": "context",
+      "title": "Decide the remediation",
+      "text": "With the context, the agent chooses the fix and decides who must approve it.",
+      "payload": [
+        [
+          "classification",
+          "customer data · not intended public",
+          "Combines tags, names and the absence of a public-by-design record."
+        ],
+        [
+          "fix",
+          "enable all four Block Public Access settings · remove public statement from policy",
+          "Closes the exposure and prevents it recurring through a new policy."
+        ],
+        [
+          "approval",
+          "owner (prod)",
+          "Production changes need the resource owner; non-prod could auto-merge by policy."
+        ],
+        [
+          "incident?",
+          "no (no outside reads, logging confirmed)",
+          "If outside reads had appeared, this would escalate to incident response."
+        ]
+      ],
+      "depth": {
+        "beginner": "The agent decides this is customer data that should not be public. The fix is to switch the bucket's safety settings back on and remove the rule that made it public. Because it is a live production system, the owner must approve first. If anyone outside had downloaded files, the agent would raise a security incident instead.",
+        "practitioner": "AWS recommends enabling all four Block Public Access settings: BlockPublicAcls, IgnorePublicAcls, BlockPublicPolicy and RestrictPublicBuckets. Enabling them overrides public grants without deleting the policies, so the agent also removes the public statement to keep the configuration honest. Policy decides approval: production needs the owner; development can be auto-fixed with notification.",
+        "expert": "Prefer organisation- or account-level guardrails so new buckets inherit protection; AWS supports Block Public Access at organisation, account, bucket and access point levels, applying the most restrictive. On Azure, disallowing anonymous blob access is a storage-account setting; on Google Cloud, public access prevention can be enforced per bucket or through an organisation policy constraint."
+      },
+      "walk": {
+        "why": "A clear decision record, with the reasons and the approval rule applied, makes automated fixes auditable.",
+        "wrong": "Fixing the symptom only, such as deleting one policy statement, lets the same mistake return with the next deployment.",
+        "example": "A common pattern is auto-remediation in sandbox accounts and owner approval in production."
+      }
     },
     {
       "from": "agent",
       "to": "repo",
       "label": "pull request",
       "title": "Fix it in code, not by clicking",
-      "text": "If you fix the live setting only, the next deploy puts the old one back. The agent changes the infrastructure-as-code file so the fix sticks.",
+      "text": "If you fix only the live setting, the next deploy puts the old one back. The agent changes the infrastructure-as-code file.",
       "payload": [
         [
           "file",
           "infra/storage.tf",
-          ""
+          "Where this bucket is defined as code."
         ],
         [
           "change",
-          "public_access = false",
-          ""
+          "aws_s3_bucket_public_access_block: all four settings = true",
+          "Terraform resource that sets the bucket's Block Public Access settings."
         ],
         [
-          "policy",
-          "non-prod: auto-merge · prod: owner approval",
-          "Riskier environments get a human."
+          "also",
+          "remove Principal \"*\" statement from bucket policy",
+          "Keeps the written policy consistent with the intended access."
+        ],
+        [
+          "plan output",
+          "1 to add, 1 to change, 0 to destroy",
+          "A preview of exactly what the deploy will do, attached for review."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Most cloud setups are written down as code, like a blueprint, and rebuilt from that blueprint. If the agent only flipped the switch in the live account, the next rebuild would flip it back. So it edits the blueprint instead, adding the safety settings and removing the public rule, and attaches a preview showing exactly what will change.",
+        "practitioner": "Infrastructure-as-code (IaC) tools like Terraform define resources in files reviewed through pull requests. The agent adds an `aws_s3_bucket_public_access_block` resource with all four settings true and edits the bucket policy. A plan preview shows additions, changes and deletions; zero destroys is an important sanity check for a security fix.",
+        "expert": "Detect drift: if the live setting differs from code, someone changed it by hand, which itself needs explaining. Use policy-as-code checks in CI (for example rules that reject public buckets without an exception tag) so the mistake cannot be merged again. Keep the agent's IaC permissions to proposing changes; deployment credentials stay with the pipeline."
+      },
+      "walk": {
+        "why": "Code is reviewed, versioned and reapplied consistently. Fixing it there makes the fix stick.",
+        "wrong": "Console-only fixes get overwritten by the next deployment, and the exposure quietly returns.",
+        "example": "Teams that manage cloud resources with Terraform or similar tools usually block manual console changes in production for exactly this reason."
+      },
+      "predict": {
+        "question": "The agent could flip the switch in the cloud console in seconds. Why does it open a pull request against the infrastructure code instead?",
+        "reveal": "Because the bucket is managed as code. A console-only change would be overwritten by the next deployment, and it would skip review, so the exposure could quietly return."
+      }
     },
     {
       "from": "agent",
       "to": "owner",
       "label": "please approve",
       "title": "Ask the right person",
-      "text": "The owner tag tells the agent exactly who to ask, so it doesn't go to a busy central security queue.",
+      "text": "The owner tag tells the agent exactly who to ask.",
       "payload": [
+        [
+          "to",
+          "r.malik (owner tag)",
+          "Routing by tag reaches the person who knows the bucket's purpose."
+        ],
         [
           "message",
           "\"customer-exports is public and holds order data. Approve the PR to close it?\"",
-          ""
+          "Short, specific, with the decision clearly stated."
+        ],
+        [
+          "deadline",
+          "4 hours, then escalate to team lead",
+          "Exposure is ongoing, so silence cannot block the fix forever."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The agent asks the bucket's owner, named in its tags, to approve the fix. The message is short: what is wrong, what will change and a button to approve. If the owner does not reply within a few hours, the request goes to their team lead, because the data is exposed while everyone waits.",
+        "practitioner": "Owner routing avoids clogging a central security queue. The request links the pull request, plan output and evidence. An escalation deadline balances respect for the owner's context with the risk of ongoing exposure. Owners can also reply \"intended public\", which records an exception instead of a fix.",
+        "expert": "Exceptions need an expiry and a reason, and should be visible to the scanner so the same finding does not keep reappearing. Track time-to-approve per team; slow approvals are a risk metric. For data that must never be public, consider pre-approved emergency blocking at the account level."
+      },
+      "walk": {
+        "why": "The owner knows whether a bucket is meant to be public; asking them prevents outages and builds trust in automation.",
+        "wrong": "Requests to the wrong team, or without deadlines, leave exposures open for weeks.",
+        "example": "Owner tags are a common requirement in cloud governance policies precisely so alerts can be routed automatically."
+      }
     },
     {
       "from": "repo",
       "to": "cloud",
       "label": "deploy",
-      "title": "Merged, deployed, verified",
+      "title": "Merged and deployed",
+      "text": "After approval the pipeline applies the change.",
+      "payload": [
+        [
+          "approved by",
+          "r.malik",
+          "Recorded with time on the pull request."
+        ],
+        [
+          "pipeline",
+          "terraform apply · succeeded",
+          "Deployment is done by the pipeline's credentials, not the agent's."
+        ],
+        [
+          "live setting",
+          "Block Public Access: all on",
+          "The protection now applies to the bucket."
+        ]
+      ],
+      "depth": {
+        "beginner": "The owner approves, the change is merged, and the automatic deployment applies the new blueprint to the cloud account. The safety settings are now on and the public rule is gone.",
+        "practitioner": "The deployment pipeline, not the agent, holds the credentials that change production. That separation means a compromised or confused agent cannot alter the cloud account directly. The pipeline logs who approved and what was applied.",
+        "expert": "Apply guardrails at higher levels too: organisation-level Block Public Access on AWS, an Azure Policy that denies storage accounts allowing anonymous blob access, or the Google Cloud organisation policy that enforces public access prevention."
+      },
+      "walk": {
+        "why": "Separating proposal (agent) from deployment (pipeline) limits what automation can break.",
+        "wrong": "Giving the agent deploy credentials removes the review gate and widens the blast radius of mistakes.",
+        "example": "A standard pattern is: bots open pull requests, CI checks them, humans approve, pipelines deploy."
+      }
+    },
+    {
+      "from": "scan",
+      "to": "agent",
+      "label": "re-scan clean",
+      "title": "Verify the fix",
       "text": "After deployment the scanner checks again to confirm the finding is really gone.",
       "payload": [
         [
           "status",
           "resolved · re-scan clean",
-          ""
+          "Verification by the independent scanner, not the agent's own claim."
         ],
         [
           "time open",
-          "47 minutes",
-          "Industry average is often weeks."
+          "47 minutes (illustrative)",
+          "Track this as time-to-remediate."
+        ],
+        [
+          "prevention",
+          "CI policy rule added for public buckets",
+          "Stops the same mistake being merged again."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Finally, the scanner checks the bucket again and confirms it is no longer public. The finding is marked fixed, and a new check is added so the same mistake cannot slip into the blueprint again.",
+        "practitioner": "Closing the loop with an independent re-scan proves the fix, rather than trusting the deployment's success message. Time-to-remediate per severity is the key metric for this workflow. Adding a policy-as-code rule turns one fix into lasting prevention.",
+        "expert": "Feed outcomes back: false positives into scanner tuning, owner exceptions into the allow-list, and recurring patterns into templates and organisation-level guardrails. Review automation actions regularly as part of change management."
+      },
+      "walk": {
+        "why": "Verification closes the loop and gives an honest metric for how fast exposures really get fixed.",
+        "wrong": "Marking findings closed when the pull request merges, without re-scanning, hides failed or partial deployments.",
+        "example": "Posture tools typically re-evaluate resources automatically after changes and close findings only when the rule passes."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Learn how an agent fixes a public cloud bucket safely: check context, change the code, ask the owner, then verify.",
+    "thirtySeconds": [
+      "A scanner flags storage that anyone on the internet can read.",
+      "The agent checks owner, contents and access logs, then proposes a fix in infrastructure-as-code.",
+      "The owner approves, the pipeline deploys, and an independent re-scan confirms the fix."
+    ],
+    "whyItMatters": "Misconfigured cloud storage is a common cause of accidental data exposure, and cloud accounts change too quickly for manual reviews to keep up. Automated remediation can close exposures in minutes, but done carelessly it breaks websites or gets silently undone by the next deployment. Fixing in code, routing to owners and verifying independently gives you speed without new outages.",
+    "analogy": "A building manager finds a fire door propped open. Instead of just shutting it, they check whether it is propped for a delivery, update the building rules so it closes automatically, ask the floor manager to confirm, and walk past later to make sure it stayed shut.",
+    "audience": "Cloud security engineers, platform teams, and developers who own cloud resources and infrastructure code.",
+    "minutes": 16,
+    "prerequisites": [
+      "tool-use",
+      "human-in-loop"
+    ],
+    "deepDives": [
+      {
+        "title": "How storage becomes public, on three clouds",
+        "body": "On AWS, buckets become public through access control lists or policies that grant access to everyone; S3 Block Public Access settings override those grants at organisation, account, bucket and access point level. New buckets do not allow public access by default.\n\nOn Azure, anonymous blob access can be disallowed for a whole storage account. On Google Cloud, public access prevention can be enforced per bucket or through an organisation policy."
+      },
+      {
+        "title": "Infrastructure-as-code and drift",
+        "body": "Infrastructure-as-code keeps cloud configuration in files that are reviewed and applied by pipelines. When the live account differs from the files, that is drift, usually caused by manual changes.\n\nFixing misconfigurations in code makes the fix permanent and reviewable; fixing only the live setting invites the next deploy to undo it."
+      },
+      {
+        "title": "Guardrails beat clean-up",
+        "body": "Account- and organisation-level controls stop whole classes of mistakes before they happen. Combine them with policy-as-code checks in CI, so a public bucket cannot be merged without an approved, expiring exception."
+      },
+      {
+        "title": "Configured versus effective access",
+        "body": "A bucket policy can say \"public\" while an account-level control quietly blocks it, and the reverse is also possible. What matters is the effective permission after every layer is applied.\n\nOn AWS, S3 applies the most restrictive combination of organisation, account, bucket and access point Block Public Access settings. Good scanners and agents report the effective result, which avoids both false alarms and missed exposures."
+      }
+    ],
+    "production": [
+      {
+        "title": "Breaking legitimate public content",
+        "body": "Static websites and public datasets are meant to be readable. Keep an allow-list with owners and expiry dates, and let owners mark exceptions instead of fighting the automation."
+      },
+      {
+        "title": "Exposure that was already exploited",
+        "body": "If access logs show outside downloads, this is an incident, not a configuration fix. Preserve logs and hand over to incident response before changing anything."
+      },
+      {
+        "title": "Over-powered automation",
+        "body": "An agent with direct write access to production cloud accounts can cause outages faster than any person. Keep it to proposals; deployment credentials belong to the pipeline."
+      },
+      {
+        "title": "Silent drift",
+        "body": "Manual console changes reintroduce exposures. Detect drift, restrict console changes in production and re-scan after every deployment."
+      },
+      {
+        "title": "Exceptions that never expire",
+        "body": "\"Intended public\" exceptions are easy to grant and easy to forget. Give every exception an owner, a reason and an expiry date, and re-review it when it lapses."
+      }
+    ],
+    "lab": {
+      "title": "A triage agent with risk-tagged tools",
+      "intro": "The reference security agent used across this path: risk-tagged tools, validation, approval for disruptive actions and hourly limits. Treat \"enable public access block\" as a reversible action and \"delete bucket\" as disruptive to see the gate work.",
+      "dir": "labs/security"
+    },
+    "takeaways": [
+      "Check context first: some public storage is intentional, and logs may show an existing breach.",
+      "Fix misconfigurations in infrastructure-as-code so the next deploy doesn't undo them.",
+      "Route approvals to the resource owner, with an escalation deadline.",
+      "Let pipelines deploy; let independent scanners verify.",
+      "Prefer organisation-level guardrails so the mistake cannot happen again."
+    ],
+    "faq": [
+      {
+        "q": "Are new S3 buckets public by default?",
+        "a": "No. AWS documents that new buckets, access points and objects don't allow public access by default; they become public only when someone changes policies, ACLs or Block Public Access settings."
+      },
+      {
+        "q": "Why not just fix the setting in the cloud console?",
+        "a": "If the resource is managed as code, the next deployment can put the old setting back. Fixing the code makes the change reviewed and permanent."
+      },
+      {
+        "q": "What if the bucket is supposed to be public?",
+        "a": "The owner records an exception with a reason and an expiry date, and the scanner skips it until then."
+      },
+      {
+        "q": "Does this work on Azure and Google Cloud?",
+        "a": "Yes. Azure lets you disallow anonymous blob access per storage account, and Google Cloud offers public access prevention per bucket or by organisation policy. The workflow is the same."
+      },
+      {
+        "q": "Should the agent ever fix production without approval?",
+        "a": "Only where the organisation has decided in advance that a specific fix is always safe, for example blocking public access on buckets tagged as containing personal data. That rule is a policy decision made by people, not by the agent."
+      }
+    ],
+    "related": [
+      "vuln-patch",
+      "access-review",
+      "human-in-loop",
+      "soar-playbook"
+    ]
+  },
+  "quiz": [
+    {
+      "q": "Why does the agent change the infrastructure-as-code file instead of only the live setting?",
+      "options": [
+        "It is faster",
+        "So the next deployment doesn't revert the fix",
+        "Because consoles cannot change settings",
+        "To avoid approval"
+      ],
+      "answer": 1,
+      "explain": "Code is the source of truth for managed resources. A console-only fix can be overwritten by the next deploy."
+    },
+    {
+      "q": "Access logs show zero outside reads, but logging was disabled until yesterday. What can you conclude?",
+      "options": [
+        "The data was never exposed",
+        "Nothing reliable about earlier exposure",
+        "The bucket is not public",
+        "The scanner was wrong"
+      ],
+      "answer": 1,
+      "explain": "Empty logs only prove something when logging was on. Without coverage, earlier access is unknown."
+    },
+    {
+      "q": "Which AWS feature overrides public bucket policies and ACLs?",
+      "options": [
+        "S3 Versioning",
+        "S3 Block Public Access",
+        "S3 Lifecycle rules",
+        "S3 Transfer Acceleration"
+      ],
+      "answer": 1,
+      "explain": "Block Public Access settings override public grants at organisation, account, bucket and access point levels."
+    },
+    {
+      "q": "Who should hold the credentials that deploy the fix to production?",
+      "options": [
+        "The remediation agent",
+        "The deployment pipeline",
+        "The scanner",
+        "Every developer"
+      ],
+      "answer": 1,
+      "explain": "Keeping deploy credentials in the pipeline means the agent can only propose; reviewed changes are applied by the pipeline."
     }
   ]
 }

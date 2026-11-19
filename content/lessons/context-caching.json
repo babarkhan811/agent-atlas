@@ -1,0 +1,308 @@
+{
+  "id": "context-caching",
+  "path": "knowledge-protocols",
+  "order": 3,
+  "tier": "pro",
+  "category": "Knowledge",
+  "title": "Context engineering and prompt caching",
+  "summary": "Decide what goes into the model's context, order it so the stable part can be cached, and stop paying full price to resend it every turn.",
+  "seoTitle": "Context engineering and prompt caching explained",
+  "seoDescription": "How to assemble an LLM's context, order it for prefix caching, read cache usage fields, and avoid silent cache misses, with Anthropic, OpenAI and Gemini compared.",
+  "objectives": [
+    "Assemble a context window from instructions, tools, documents and history, and order it from most to least stable.",
+    "Explain how prefix caching works: cache writes, cache reads, lifetimes and what silently invalidates a cache.",
+    "Measure cache effectiveness from usage fields and decide when to trim, summarise or compact long contexts."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    { "title": "Anthropic: Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" },
+    { "title": "Anthropic: Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" },
+    { "title": "Anthropic: Compaction", "url": "https://platform.claude.com/docs/en/build-with-claude/compaction" },
+    { "title": "OpenAI: Prompt caching", "url": "https://developers.openai.com/api/docs/guides/prompt-caching" },
+    { "title": "Google: Gemini context caching", "url": "https://ai.google.dev/gemini-api/docs/caching" }
+  ],
+  "nodes": [
+    { "id": "user", "label": "Customer", "kind": "user", "x": 9, "y": 50 },
+    { "id": "app", "label": "Support app", "kind": "app", "x": 34, "y": 50 },
+    { "id": "kb", "label": "Help-centre docs", "kind": "data", "x": 34, "y": 88 },
+    { "id": "api", "label": "LLM API", "kind": "external", "x": 63, "y": 50 },
+    { "id": "cache", "label": "Prompt cache", "kind": "data", "x": 63, "y": 12 },
+    { "id": "model", "label": "Model", "kind": "model", "x": 91, "y": 50 }
+  ],
+  "steps": [
+    {
+      "from": "user", "to": "app", "label": "question",
+      "title": "A question that needs a lot of context",
+      "text": "The customer asks one short question, but a good answer needs policies, product docs and the chat so far.",
+      "payload": [
+        ["text", "\"Can I return headphones I opened 20 days ago?\"", "Short question; the hard part is the context needed to answer it."],
+        ["conversation", "turn 4 of this chat", "Earlier turns matter: the customer already said which order this is."],
+        ["customer_tier", "\"standard\"", "Account data that changes the answer (some tiers get longer return windows)."]
+      ],
+      "depth": {
+        "beginner": "A customer asks a simple-sounding question about returning headphones. To answer well, the assistant needs more than the question: the shop's return policy, details about this product, and what the customer already said earlier in the chat. Everything the model needs to know has to be handed to it every single time, because the model itself remembers nothing between requests.",
+        "practitioner": "The user turn is tiny, but the context needed to answer it is large: instructions, tool definitions, policy text, retrieved product docs and the conversation history. Context engineering is the job of choosing which of these to include, in what order and in what form, so the model has what it needs and nothing that distracts it or wastes tokens.",
+        "expert": "Treat the context window as a budget with competing claims: instructions, tool schemas, retrieved evidence, history, and room for the answer (and any reasoning). Decide per request which claims win. Account and policy data should come from trusted sources, not from the conversation, so a user cannot talk the model into a different return window."
+      },
+      "walk": {
+        "why": "Models answer from what is in front of them. A short question with the right context beats a long question with the wrong context.",
+        "wrong": "Apps either starve the model (no policy text, so it guesses) or flood it (every document, every turn), which raises cost and can bury the relevant facts.",
+        "example": "A helpdesk assistant that only sees the question invents a 30-day policy; the same model with the real policy text answers correctly and cites it."
+      }
+    },
+    {
+      "from": "kb", "to": "app", "label": "retrieved docs",
+      "title": "The app assembles the context",
+      "text": "The app gathers instructions, tools, policy, retrieved docs and history, and decides the order.",
+      "payload": [
+        ["tools", "4 definitions · ≈ 1,200 tokens", "Rarely change. Illustrative token counts throughout this lesson."],
+        ["system", "role + tone + return policy · ≈ 3,800 tokens", "Changes only when the policy is updated."],
+        ["docs", "3 product pages · ≈ 7,000 tokens", "Retrieved for this product; reused while the chat stays on it."],
+        ["history", "turns 1–3 · ≈ 900 tokens", "Grows every turn."],
+        ["question", "turn 4 · ≈ 20 tokens", "New on every request."]
+      ],
+      "depth": {
+        "beginner": "Before asking the model, the app collects everything it should know: the instructions about how to behave, the list of tools it may use, the return policy, the relevant help-centre pages and the conversation so far. Think of packing a briefing folder for an expert, with the parts that never change at the front and today's new question at the very back.",
+        "practitioner": "Assemble the prompt in layers by how often each layer changes: tools and fixed instructions first, then slowly changing reference material, then conversation history, then the new question. This ordering matters twice: it keeps the prompt consistent for the model, and it makes the longest possible prefix identical between requests, which is what prompt caching needs.",
+        "expert": "Make assembly deterministic: stable tool order, sorted JSON keys, no timestamps or request IDs in early sections. Retrieved documents should be inserted in a fixed order and deduplicated. Keep per-request or per-user data after the shared prefix. Log the token count of each layer so you can see which layer grows and where budget goes."
+      },
+      "walk": {
+        "why": "Ordering by stability produces a long, byte-identical prefix that providers can reuse instead of reprocessing.",
+        "wrong": "Putting the date, a user name or a shuffled tool list at the top of the prompt makes every request look different, so nothing can be reused.",
+        "example": "A team moves \"Today is <date>\" from the first line of the system prompt to just before the question and sees cache reads appear on the very next request."
+      }
+    },
+    {
+      "from": "app", "to": "api", "label": "POST + cache_control",
+      "title": "The request marks where the stable part ends",
+      "text": "On Anthropic's API you place cache breakpoints at stability boundaries. Other providers cache prefixes automatically.",
+      "payload": [
+        ["order", "tools → system → messages", "The order the request is rendered in; the cache key is built from these bytes."],
+        ["system[last].cache_control", "{ type: \"ephemeral\" }", "A breakpoint: cache everything up to here. Default lifetime is 5 minutes."],
+        ["messages[docs].cache_control", "{ type: \"ephemeral\" }", "Second breakpoint after the product docs, which change less often than history."],
+        ["breakpoints", "2 of max 4", "Anthropic allows up to four explicit breakpoints per request."]
+      ],
+      "depth": {
+        "beginner": "The app sends the whole folder to the AI service. On some services it also adds little bookmarks saying \"everything up to here is the same as last time, please keep a copy\". On others the service notices repeated beginnings by itself. Either way, the goal is the same: avoid paying to process the identical front part of the folder again and again.",
+        "practitioner": "Prefix caching stores the model's processed state for the beginning of a prompt. With Anthropic you mark breakpoints using `cache_control` on content blocks, or set it once at the top level to let the API place one automatically. OpenAI and Gemini cache matching prefixes automatically on supported models. In every case only an exact prefix match is reused, so order matters more than markers.",
+        "expert": "Place breakpoints at stability boundaries, not at the end of unique content: a breakpoint after per-request text writes an entry nobody reads. Anthropic renders tools, then system, then messages, so a breakpoint on the last system block covers tools too. Caches are scoped (for example per workspace or organisation), so traffic split across keys or workspaces does not share entries."
+      },
+      "walk": {
+        "why": "Reprocessing an identical 12,000-token prefix every turn is wasted work. Marking or matching it lets the provider skip that work.",
+        "wrong": "Breakpoints placed after unique content create cache writes on every request with no reads, which costs more than not caching.",
+        "example": "A support bot with a long fixed policy places one breakpoint after the policy and one after the product docs, so both are reused for the whole chat."
+      },
+      "providers": {
+        "anthropic": "Explicit `cache_control: { type: \"ephemeral\" }` on content blocks (up to 4), or top-level `cache_control` for automatic placement. Optional `ttl: \"1h\"` for a 1-hour lifetime.",
+        "openai": "Automatic prefix caching on supported models, no markers. Optional `prompt_cache_key` groups related requests; lifetime options depend on model (for example `prompt_cache_retention` on earlier models).",
+        "gemini": "Implicit caching is on by default for Gemini 2.5 and newer, including the Interactions API. Explicit cached-content objects with a TTL are available through the legacy generateContent API on supported models."
+      }
+    },
+    {
+      "from": "api", "to": "cache", "label": "cache write",
+      "title": "First request: the prefix is written to the cache",
+      "text": "The first time a prefix is seen, it is processed normally and stored. On Anthropic's API that write costs a little extra.",
+      "payload": [
+        ["cache_creation_input_tokens", "12,000", "Tokens written to the cache this request. Billed at a premium (Anthropic: 1.25× base input for 5 minutes, 2× for 1 hour)."],
+        ["cache_read_input_tokens", "0", "Nothing to read yet; this is the first time the prefix was seen."],
+        ["input_tokens", "920", "The uncached remainder after the last breakpoint: history and the new question."]
+      ],
+      "predict": {
+        "question": "The customer sends another message 40 seconds later. Will the app pay full price again for the 12,000-token prefix?",
+        "reveal": "No. The prefix is byte-identical and still within its lifetime, so the next request reads it from the cache at a fraction of the normal input price. Only the new tail is processed normally."
+      },
+      "depth": {
+        "beginner": "The first time the service sees this folder, it reads it fully and keeps a copy of the unchanging front part. Doing that costs slightly more than a normal read on some services, like paying a little extra to have a document photocopied and filed. The payoff comes on the next question, when the filed copy can be used instead of reading everything again.",
+        "practitioner": "Usage fields show what happened. On Anthropic's API, `cache_creation_input_tokens` counts tokens written to the cache, `cache_read_input_tokens` counts tokens served from it, and `input_tokens` is only the uncached remainder. The total prompt is the sum of all three. A write costs more than normal input, so a cache pays off only if it is read at least once or twice before it expires.",
+        "expert": "On Anthropic, a 5-minute write costs 1.25× base input and a read about 0.1× (lower on some newer models), so two requests already break even; a 1-hour write costs 2× and needs about three. Prefixes below the model's minimum cacheable length silently do not cache, with no error, just zero in the creation field. Check the minimum for your model in the docs."
+      },
+      "walk": {
+        "why": "Writing once and reading many times is the whole economic idea; the small write premium is repaid by cheap reads.",
+        "wrong": "A prompt shorter than the model's minimum cacheable length never caches, and teams assume caching is \"broken\" because no error appears.",
+        "example": "A team logs `cache_creation_input_tokens` and notices it is always zero for a 400-token system prompt: it was simply below the minimum length for their model."
+      },
+      "providers": {
+        "anthropic": "`usage.cache_creation_input_tokens` and `usage.cache_read_input_tokens`; `usage.input_tokens` is the uncached remainder only.",
+        "openai": "No separate write charge; cached tokens appear in `usage.input_tokens_details.cached_tokens` (Responses API) and are billed at a discount.",
+        "gemini": "Cache hits are reported in `usage.total_cached_tokens` in the Interactions API; savings pass through automatically for implicit caching."
+      }
+    },
+    {
+      "from": "api", "to": "model", "label": "prefix + new tokens",
+      "title": "The model only processes what is new",
+      "text": "On a cache hit, the model resumes from the stored state and processes just the new tail, which also speeds up the first token.",
+      "payload": [
+        ["reused", "12,000 tokens from cache", "Not reprocessed; the stored state is loaded instead."],
+        ["processed", "≈ 940 new tokens", "History tail plus the new question."],
+        ["effect", "shorter time-to-first-token", "Less prompt processing before the answer starts. The size of the gain varies by model and prompt."]
+      ],
+      "depth": {
+        "beginner": "Because the service kept a ready-read copy of the front of the folder, the model only needs to read the new parts: the last few messages and the new question. That saves money, and it also means the answer starts appearing sooner, because most of the reading was already done.",
+        "practitioner": "Most of the time before the first output token is spent processing the prompt. Reusing a cached prefix removes most of that work for long prompts, so caching improves latency as well as cost. The model's behaviour is unchanged: it sees exactly the same context as without caching, just processed more efficiently.",
+        "expert": "Caching does not change outputs, only cost and speed, so it is safe to turn on without re-running quality evaluations. Measure time-to-first-token separately from total time; caching helps the former, while long answers are still bounded by output speed. On Anthropic's API, cache reads also do not count toward input-token rate limits on most models, which can raise throughput."
+      },
+      "walk": {
+        "why": "The expensive part of a long prompt is reading it. Skipping that reading is where both the savings and the speed-up come from.",
+        "wrong": "Expecting caching to speed up long answers: it shortens the wait for the first token, not the time to write 2,000 tokens of output.",
+        "example": "A coding assistant with a large repository summary in its prompt starts replying noticeably faster from the second question onward."
+      }
+    },
+    {
+      "from": "cache", "to": "api", "label": "cache read",
+      "title": "Next turn: the prefix is read from the cache",
+      "text": "Within the lifetime, an identical prefix is served from the cache at a steep discount, and the read refreshes its lifetime.",
+      "payload": [
+        ["cache_read_input_tokens", "12,000", "Served from cache at a fraction of the base input price."],
+        ["cache_creation_input_tokens", "≈ 700", "Small: roughly the previous answer plus the new turn, extending the cached prefix."],
+        ["input_tokens", "≈ 30", "Only the newest tail."],
+        ["lifetime", "refreshed on read", "Each read restarts the timer, so steady traffic keeps the entry warm."]
+      ],
+      "depth": {
+        "beginner": "The customer replies a minute later. This time the service uses the filed copy of the front of the folder, charging only a small fraction of the normal price for it, and reads just the new message in full. Every time the copy is used, its expiry clock resets, so an active conversation keeps it alive.",
+        "practitioner": "In a multi-turn chat with a breakpoint on the latest turn, each request reads the whole previous prefix from cache and writes only the small new piece. On Anthropic, reads refresh the entry's lifetime at no extra cost, so requests that arrive less than five minutes apart keep a 5-minute cache warm indefinitely. Choose the 1-hour lifetime only when gaps between requests are typically 5 to 60 minutes.",
+        "expert": "The lifetime counts from the start of the request that writes or reads the entry, so a slow generation eats into the window for the next request. For bursty traffic you can compare a 1-hour lifetime against periodically re-sending a cheap request to refresh the entry. Track hit rate per traffic class, because a blended number hides the routes that never hit."
+      },
+      "walk": {
+        "why": "Conversations and agent loops resend almost the same prompt again and again, which is exactly the pattern caches reward.",
+        "wrong": "Users who reply after a long pause find the cache expired, so the next request pays the full write again. Without measuring gaps, teams pick the wrong lifetime.",
+        "example": "An agent making a tool call every few seconds keeps a 5-minute cache warm for an hour-long task, paying full price for its large prefix only once."
+      }
+    },
+    {
+      "from": "app", "to": "api", "label": "edited system prompt",
+      "title": "A tiny change silently breaks the cache",
+      "text": "Someone adds the current time to the top of the system prompt. Every request now has a different prefix, so every request misses.",
+      "payload": [
+        ["change", "system starts with \"Now: 14:02:37\"", "A value that differs on every request, placed before the breakpoint."],
+        ["cache_read_input_tokens", "0", "The prefix no longer matches any stored entry."],
+        ["cache_creation_input_tokens", "12,000 every request", "Paying the write premium each time with no reads: worse than no caching."],
+        ["fix", "move volatile data after the last breakpoint", "Keep the stable prefix byte-identical."]
+      ],
+      "predict": {
+        "question": "A developer adds the current time to the first line of the system prompt so the assistant knows the date. What happens to caching?",
+        "reveal": "Every request now has a different prefix, so nothing after that line can be read from the cache. On Anthropic's API each request also pays the write premium, making it more expensive than not caching at all. Put the time after the last breakpoint instead."
+      },
+      "depth": {
+        "beginner": "A small change can undo all the savings. Someone adds the current time to the very top of the instructions. Now the front of the folder is slightly different on every request, so the service can never reuse its filed copy and reads everything from scratch each time. The fix is simple: put anything that changes at the back of the folder, not the front.",
+        "practitioner": "Caches match exact bytes. Anything that varies before a breakpoint invalidates everything after it: timestamps, request IDs, reordered JSON keys, a tool added or removed, or switching models. The symptom is a cache read count stuck at zero across requests that look identical. Compare the rendered prompts of two consecutive requests to find the difference.",
+        "expert": "Common silent invalidators: non-deterministic serialisation, per-request tool sets, A/B-tested instructions, and changing settings that are part of the cached prefix. Caches are also tied to the model, so routing between models forfeits reuse. Add a regression check that renders two identical requests and asserts their prefixes are byte-equal."
+      },
+      "walk": {
+        "why": "A cache key is effectively a fingerprint of the exact prefix. Change one character early and the fingerprint changes.",
+        "wrong": "Teams turn caching on, add a harmless-looking timestamp later, and only notice when the bill rises.",
+        "example": "An engineering team found their hit rate drop to zero after a refactor started serialising tool definitions with keys in random order."
+      }
+    },
+    {
+      "from": "api", "to": "app", "label": "usage report",
+      "title": "Measure hits, then trim or compact the context",
+      "text": "The app logs usage per request, watches the hit rate, and keeps the growing history under control.",
+      "payload": [
+        ["hit_rate", "read ÷ (read + write + uncached)", "Share of the prompt served from cache. Track it per traffic type."],
+        ["total_prompt", "input + cache write + cache read", "On Anthropic, add all three to get the real prompt size."],
+        ["history", "growing ≈ 700 tokens per turn", "Eventually needs trimming or summarising."],
+        ["compaction", "summarise old turns near a threshold", "Replaces old history with a summary; some APIs offer this server-side."]
+      ],
+      "depth": {
+        "beginner": "Finally, the app keeps score. It records how much of each request came from the cache, which shows whether the savings are real. It also watches the conversation grow: after many turns, older messages can be replaced with a short summary, keeping the folder small enough to stay fast and affordable.",
+        "practitioner": "Log the usage fields of every response and compute a hit rate per route. A healthy multi-turn chat shows reads growing turn by turn and small writes. As history grows, trim old tool results, summarise early turns, or use a provider's compaction feature. Any rewrite of history changes the prefix, so do it occasionally and deliberately, not on every turn.",
+        "expert": "Plan history management around the cache: append-only histories cache best, and each summarisation event costs one cache rewrite. Some newer models also tie reasoning blocks to the exact conversation, so editing earlier turns can drop that reasoning; check provider guidance before rewriting history. Alert when hit rate falls sharply after a deploy."
+      },
+      "walk": {
+        "why": "Without measurement, caching is a guess. With it, you can prove savings and catch regressions immediately.",
+        "wrong": "Reading only `input_tokens` on Anthropic's API makes a long, mostly cached conversation look tiny, because cached tokens are reported in separate fields.",
+        "example": "A dashboard plots cache reads against writes per route; one route with writes but no reads reveals a breakpoint placed after unique content."
+      },
+      "providers": {
+        "anthropic": "Server-side compaction is available as a beta for long conversations; it returns compaction blocks that must be passed back unchanged.",
+        "openai": "Cached token counts appear in usage details; the request shape does not change when caching applies.",
+        "gemini": "Implicit caching in the Interactions API reuses prior requests when enough new content is added; check the caching guide for model-specific minimums."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Learn to build a model's context deliberately and order it so repeated parts are cached, cutting both cost and waiting time.",
+    "thirtySeconds": [
+      "Everything a model knows for a request is in its context: instructions, tools, documents, history and the question. Choosing and ordering that is context engineering.",
+      "Providers can cache the processed beginning of a prompt. If the next request starts with exactly the same bytes, that part is reused at a big discount.",
+      "Put stable content first and changing content last, measure cache hits from usage fields, and trim or summarise history as it grows."
+    ],
+    "whyItMatters": "Agents and chat apps resend nearly the same prompt on every turn. Without caching, a long system prompt or a set of reference documents is paid for again and again; with good ordering, most of it is read from cache at a fraction of the price and the first token arrives sooner. Context engineering also decides answer quality: the right evidence in a clear order beats a bigger pile of text.",
+    "analogy": "Imagine briefing a consultant who forgets everything after each call. You could read them the whole company handbook every time, or you could give them a bookmarked copy once and only read out what is new. Caching is the bookmarked copy; context engineering is deciding what goes in the binder and in what order.",
+    "audience": "Developers and product engineers running chatbots or agents in production, and anyone responsible for an LLM bill.",
+    "minutes": 16,
+    "prerequisites": ["llm-call", "rag"],
+    "deepDives": [
+      {
+        "title": "The context window is a budget",
+        "body": "A model reads a limited number of tokens per request. Instructions, tool schemas, retrieved documents, conversation history and the answer itself all compete for that space.\n\nGood context engineering spends the budget on what changes the answer: precise instructions, the most relevant evidence, and enough history to stay coherent. Retrieval (the RAG lesson) and memory (the memory lesson) are tools for keeping this budget focused."
+      },
+      {
+        "title": "How prefix caching works",
+        "body": "Processing a prompt produces internal state for every token. A prefix cache stores that state for the beginning of the prompt, keyed by its exact content. When a later request begins with the same bytes, the provider loads the state instead of recomputing it.\n\nOnly exact prefixes match, entries expire after a lifetime, and caches are scoped to an account or workspace. Nothing about the answer changes; only cost and speed do."
+      },
+      {
+        "title": "Trimming, summarising and compaction",
+        "body": "Long conversations eventually outgrow what is useful or affordable. Options include dropping old tool results, summarising early turns into a short note, or using a provider's compaction feature that does this server-side.\n\nEach rewrite changes the prefix, so the next request pays a cache write. Rewriting occasionally at a threshold is far cheaper than rewriting every turn."
+      }
+    ],
+    "production": [
+      {
+        "title": "Silent invalidators",
+        "body": "Timestamps, request IDs, unsorted JSON or per-request tool lists before a breakpoint make every request a miss. Keep prefixes byte-stable and test that two identical requests render identical prefixes."
+      },
+      {
+        "title": "Paying for writes nobody reads",
+        "body": "Breakpoints after unique content, or lifetimes shorter than the gap between requests, produce cache writes without reads. On Anthropic's API that costs more than not caching. Watch write-to-read ratios per route."
+      },
+      {
+        "title": "Misleading usage numbers",
+        "body": "On Anthropic's API `input_tokens` excludes cached tokens, so the real prompt size is the sum of three fields. Dashboards that read one field under-report context growth."
+      },
+      {
+        "title": "Context bloat hurting quality",
+        "body": "Cheap cached tokens tempt teams to include everything. Irrelevant documents still distract the model and still take up context, so keep retrieval focused even when caching is on."
+      }
+    ],
+    "takeaways": [
+      "Context engineering is choosing what the model sees and in what order.",
+      "Order the prompt from most stable to least stable so the longest prefix can be cached.",
+      "Caches match exact bytes; one timestamp near the top can turn every request into a miss.",
+      "Read cache usage fields on every response and track hit rate per route.",
+      "Trim or summarise history at thresholds, not every turn, because each rewrite costs a cache write."
+    ],
+    "faq": [
+      { "q": "Does prompt caching change the model's answers?", "a": "No. The model sees the same context; the provider just reuses work it already did on the identical prefix. Only cost and speed change." },
+      { "q": "Do I have to mark what to cache?", "a": "It depends on the provider. Anthropic uses explicit `cache_control` breakpoints or one automatic top-level setting. OpenAI and Gemini cache matching prefixes automatically on supported models. In all cases, stable ordering is what makes hits possible." },
+      { "q": "How long does a cache last?", "a": "It depends on provider and settings. On Anthropic's API the default lifetime is 5 minutes, refreshed on every read, with a 1-hour option. OpenAI and Gemini document their own lifetimes per model; check the current docs." },
+      { "q": "Why is my cache hit rate zero?", "a": "Usually something early in the prompt changes on every request, the prompt is below the model's minimum cacheable length, or traffic is split across workspaces or models that do not share caches." }
+    ],
+    "related": ["memory", "rag", "cost-latency", "observability"]
+  },
+  "quiz": [
+    {
+      "q": "Which ordering gives the best cache reuse?",
+      "options": ["Question, history, documents, instructions", "Instructions and tools, documents, history, question", "Random order each time", "Documents, question, tools, history"],
+      "answer": 1,
+      "explain": "Put the most stable content first and the newest content last, so the longest possible prefix stays identical between requests."
+    },
+    {
+      "q": "A team adds the current time to the first line of the system prompt. What happens?",
+      "options": ["Nothing changes", "Every request becomes a cache miss", "The cache lasts longer", "Only the answer changes"],
+      "answer": 1,
+      "explain": "Caches match exact bytes. A value that changes on every request near the top of the prompt makes every prefix different."
+    },
+    {
+      "q": "On Anthropic's API, how do you get the full prompt size of a request?",
+      "options": ["Read `input_tokens` only", "Add `input_tokens`, `cache_creation_input_tokens` and `cache_read_input_tokens`", "Read `output_tokens`", "Count characters and divide by four"],
+      "answer": 1,
+      "explain": "`input_tokens` is only the uncached remainder. Cached reads and writes are reported separately."
+    },
+    {
+      "q": "Does prompt caching change what the model answers?",
+      "options": ["Yes, it uses older answers", "No, it only changes cost and speed", "Yes, it lowers quality", "Only for long prompts"],
+      "answer": 1,
+      "explain": "The model sees the same context; the provider reuses processing it already did on the identical prefix."
+    }
+  ]
+}

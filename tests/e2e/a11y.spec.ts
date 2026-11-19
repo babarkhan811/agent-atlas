@@ -6,6 +6,11 @@ const PAGES = [
   ["lesson (sequence)", "/learn/knowledge-protocols/mcp/?step=4&view=sequence"],
   ["lesson with guide (expert depth)", "/learn/foundations/tool-use/?step=3&depth=expert"],
   ["guide", "/guide/"],
+  ["guide part", "/guide/reference-implementation/"],
+  ["learn hub", "/learn/"],
+  ["path page", "/learn/security/"],
+  ["glossary term", "/glossary/rag/"],
+  ["about", "/about/"],
   ["glossary", "/glossary/"],
   ["404", "/learn/foundations/missing/"],
 ] as const;

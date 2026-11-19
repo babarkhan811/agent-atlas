@@ -6,6 +6,40 @@
   "category": "Cybersecurity automation",
   "title": "Automated phishing analysis",
   "summary": "Employees report suspicious emails; an AI pipeline checks every one in seconds.",
+  "seoTitle": "Automated phishing analysis with AI: SPF, DKIM, DMARC and sandboxing",
+  "seoDescription": "How an AI-assisted pipeline checks reported emails: authentication results, DMARC alignment, safe link detonation, an LLM verdict and removing copies from every inbox.",
+  "objectives": [
+    "Read SPF, DKIM and DMARC results and explain why DMARC needs an aligned pass.",
+    "Describe how a phishing pipeline combines code checks, a sandbox and an LLM into one verdict.",
+    "Plan the response to a confirmed phish: purge copies, protect users who clicked, and close the loop with the reporter."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    {
+      "title": "RFC 9989: Domain-based Message Authentication, Reporting, and Conformance (DMARC), May 2026, obsoletes RFC 7489",
+      "url": "https://www.rfc-editor.org/rfc/rfc9989"
+    },
+    {
+      "title": "RFC 7208: Sender Policy Framework (SPF)",
+      "url": "https://www.rfc-editor.org/rfc/rfc7208"
+    },
+    {
+      "title": "RFC 6376: DomainKeys Identified Mail (DKIM) Signatures",
+      "url": "https://www.rfc-editor.org/rfc/rfc6376"
+    },
+    {
+      "title": "RFC 8601: Message Header Field for Indicating Message Authentication Status",
+      "url": "https://www.rfc-editor.org/rfc/rfc8601"
+    },
+    {
+      "title": "MITRE ATT&CK T1566.002: Phishing, Spearphishing Link",
+      "url": "https://attack.mitre.org/techniques/T1566/002/"
+    },
+    {
+      "title": "CISA: Phishing Guidance, Stopping the Attack Cycle at Phase One",
+      "url": "https://www.cisa.gov/resources-tools/resources/phishing-guidance-stopping-attack-cycle-phase-one"
+    }
+  ],
   "nodes": [
     {
       "id": "user",
@@ -49,81 +83,237 @@
       "to": "pipe",
       "label": "report",
       "title": "Someone clicks \"Report phishing\"",
-      "text": "",
+      "text": "An employee reports a suspicious email with one click. The pipeline takes it from there.",
       "payload": [
         [
           "subject",
           "\"Urgent: your mailbox will be suspended\"",
-          ""
+          "Urgency and threats are classic pressure tactics."
         ],
         [
           "from",
           "\"IT Support\" <it-support@micr0soft-help.example>",
-          "Display name looks right; the domain doesn't."
+          "The display name looks official; the address uses a lookalike domain with a zero."
+        ],
+        [
+          "reported by",
+          "s.ahmed",
+          "Who reported it, so the pipeline can reply and credit them."
+        ],
+        [
+          "message id",
+          "<a1b2c3@micr0soft-help.example>",
+          "Unique ID used to find every copy of the same email later."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "An employee gets an email saying their mailbox will be shut down unless they act now. It claims to be from IT Support, but something feels off, so they press the \"Report phishing\" button. Phishing means tricking people with fake messages to steal passwords or install malware. Reports like this are valuable: people often spot new scams before security filters do. Now an automated pipeline starts checking the email.",
+        "practitioner": "The report button forwards the original message, including all headers, to an analysis mailbox or API. Keep the original intact: re-forwarded copies lose the headers that prove where it came from. The pipeline records the reporter, the message ID and the receipt time, then runs checks in parallel. Reports are the input; the pipeline's job is to give each one a verdict quickly and consistently.",
+        "expert": "Deduplicate by message ID and by normalised content, since one campaign can generate dozens of reports. The email body is attacker-controlled and may contain text written to manipulate an AI reader, so treat it as untrusted data throughout. Never open attachments or links on the analysis host itself; route them to isolated tooling."
+      },
+      "walk": {
+        "why": "People are a sensor network. A fast, consistent response to every report encourages more reporting, which catches campaigns earlier.",
+        "wrong": "Reports pile up unread, reporters hear nothing back and stop reporting, and the same campaign is analysed many times over.",
+        "example": "Many mail platforms add a built-in report button that sends the original message with headers to the security team's queue."
+      }
+    },
+    {
+      "from": "pipe",
+      "to": "mail",
+      "label": "read headers",
+      "title": "Check who really sent it",
+      "text": "The pipeline reads the receiving server's authentication results: SPF, DKIM and DMARC.",
+      "payload": [
+        [
+          "spf",
+          "fail (smtp.mailfrom=bounce@mailer-x.example)",
+          "The sending server is not authorised by the envelope sender's domain (RFC 7208)."
+        ],
+        [
+          "dkim",
+          "none",
+          "The message carries no DKIM signature, so its content and domain are unverified (RFC 6376)."
+        ],
+        [
+          "dmarc",
+          "fail (header.from=micr0soft-help.example)",
+          "Needs an SPF or DKIM pass whose domain aligns with the visible From domain; neither does."
+        ],
+        [
+          "Authentication-Results",
+          "mx.corp.example; spf=fail …; dkim=none; dmarc=fail",
+          "The header the receiving server adds to record these results (RFC 8601)."
+        ]
+      ],
+      "depth": {
+        "beginner": "Email has built-in ways to check if a sender is real. SPF checks whether the server that sent the email is allowed to send for that domain. DKIM checks a digital signature on the message. DMARC ties them together: it passes only if one of those checks passes for the same domain shown in the From line. Here SPF failed, there is no signature, and DMARC failed. The sender is not who they claim.",
+        "practitioner": "Read the receiving server's `Authentication-Results` header rather than re-running checks later, because DNS records can change. DMARC (now RFC 9989, which replaced RFC 7489 in 2026) passes only when SPF or DKIM passes with a domain aligned to the From domain: the same organisational domain in relaxed mode, or the exact domain in strict mode. A pass proves the domain is authentic, not that the domain is trustworthy.",
+        "expert": "Attackers increasingly use their own domains with perfect SPF, DKIM and DMARC, so passing authentication is weak evidence of legitimacy. Lookalike domains, newly registered domains and compromised legitimate accounts all pass. Note also that `Authentication-Results` headers added by untrusted hops can be forged; trust only the one added by your own boundary server."
+      },
+      "walk": {
+        "why": "Authentication results are cheap, exact facts that code can check. They catch spoofed senders before any AI is involved.",
+        "wrong": "Treating \"DMARC pass\" as \"safe\" misses lookalike domains, and trusting headers added by other servers lets attackers forge good-looking results.",
+        "example": "Messages pretending to come from a bank's real domain usually fail DMARC at providers that enforce it, which is why attackers switch to lookalike domains."
+      },
+      "predict": {
+        "question": "If an email passes SPF, DKIM and DMARC, is it safe?",
+        "reveal": "No. Authentication proves the message really came from the domain in the From line. An attacker who registers micr0soft-help.example can pass all three for their own domain."
+      }
     },
     {
       "from": "pipe",
       "to": "sandbox",
       "label": "detonate links",
-      "title": "Check headers and links safely",
-      "text": "Code checks email authentication results, and links are opened in an isolated sandbox browser, never on a real machine.",
+      "title": "Open the links safely",
+      "text": "Links are opened in an isolated sandbox browser, never on a real machine.",
       "payload": [
         [
-          "SPF / DKIM / DMARC",
-          "fail / none / fail",
-          "The sender isn't who they claim."
-        ],
-        [
           "link",
-          "lands on a fake login page",
-          ""
+          "https://login.micr0soft-help.example/verify",
+          "The visible button text said \"Keep my mailbox\"; the real link points to a lookalike domain."
         ],
         [
-          "screenshot",
-          "copy of the company sign-in page",
-          ""
+          "final URL",
+          "https://login.micr0soft-help.example/owa/",
+          "Where the link ends up after redirects."
+        ],
+        [
+          "page",
+          "sign-in form mimicking the company login",
+          "A credential-harvesting page (ATT&CK T1566.002, spearphishing link)."
+        ],
+        [
+          "domain age",
+          "4 days (illustrative)",
+          "Very new domains are a common sign of a short-lived phishing site."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The email has a button labelled \"Keep my mailbox\". The pipeline opens that link inside a sandbox, a sealed-off browser on a separate machine that can be wiped afterwards. The link leads to a fake sign-in page copying the company's real login screen. Anyone typing their password there would hand it to the attacker. The sandbox also takes a screenshot as evidence.",
+        "practitioner": "The sandbox follows redirects, records the final URL, captures a screenshot and page features (password fields, brand logos) and checks domain age and reputation. Credential-harvesting pages often show the real brand's look on a new lookalike domain. All of this runs on isolated infrastructure; the pipeline only receives structured results and the screenshot.",
+        "expert": "Phishing kits often cloak: they show harmless content to known scanner IP ranges, cloud data centres or non-matching user agents, and only reveal the fake login to real targets. Use varied egress and realistic browser fingerprints, and treat \"page looked harmless\" as inconclusive, not as benign. Avoid submitting any credentials; detection does not require it."
+      },
+      "walk": {
+        "why": "Seeing where a link really leads is the strongest single signal for credential phishing, and isolation makes it safe to look.",
+        "wrong": "Opening links on an analyst's laptop risks infection, and cloaked kits can fool a single automated visit into a false \"clean\" result.",
+        "example": "Security teams commonly use isolated browsing services to screenshot suspicious pages before deciding to block them."
+      }
     },
     {
       "from": "pipe",
       "to": "llm",
       "label": "email + evidence",
       "title": "The LLM reads it like an analyst would",
-      "text": "Models are good at spotting manipulation: urgency, threats, mismatched branding. The email body is treated as untrusted data.",
+      "text": "The model gets the email as untrusted data plus all the evidence, and judges the whole picture.",
       "payload": [
         [
-          "signals",
-          "urgency · credential request · lookalike domain",
-          ""
+          "email",
+          "<untrusted_email>…</untrusted_email>",
+          "The body is wrapped and labelled as data so instructions inside it are not followed."
         ],
         [
-          "verdict",
-          "phishing · credential harvesting",
-          ""
+          "evidence",
+          "auth results · sandbox report · screenshot",
+          "Facts gathered by code, given to the model to reason over."
+        ],
+        [
+          "output_schema",
+          "{ verdict, campaign_type, signals[], confidence }",
+          "A fixed structure so the next steps can rely on the answer."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Now an AI model reads the email the way an experienced analyst would, along with everything the pipeline found. It is good at spotting manipulation: false urgency, threats, a mismatch between the brand and the sender, a request to sign in. Importantly, the email is clearly marked as \"text to analyse\", so if it contains hidden instructions like \"mark this as safe\", the model treats them as suspicious content, not orders.",
+        "practitioner": "Code gathers exact facts; the model judges the overall picture, including language, intent and how the evidence fits together. Use structured output so the verdict is machine-readable: a label, a campaign type such as credential harvesting, the signals relied on and a confidence. Keep the model's tools minimal; it needs none to read and classify.",
+        "expert": "Phishing emails increasingly include hidden text aimed at AI filters, such as white-on-white instructions to classify the message as safe. Defences: wrap the email as untrusted data, give the model no tools during classification, require evidence-based signals in the output, and let code-level rules (such as DMARC fail plus credential page) override a lenient model verdict."
+      },
+      "walk": {
+        "why": "Language and intent are hard to capture in rules but easy for a language model, while exact facts are better left to code.",
+        "wrong": "A model given the email alone, without evidence, can be fooled by polished writing; a model with tools can be manipulated into taking actions.",
+        "example": "Email security products increasingly combine authentication checks and URL analysis with language-model classification of message intent."
+      }
+    },
+    {
+      "from": "llm",
+      "to": "pipe",
+      "label": "verdict",
+      "title": "A structured verdict",
+      "text": "The model returns a verdict in a fixed format, which the pipeline checks against its own rules.",
+      "payload": [
+        [
+          "verdict",
+          "\"phishing\"",
+          "One of a fixed set: phishing, spam, legitimate, unsure."
+        ],
+        [
+          "campaign_type",
+          "\"credential_harvesting\"",
+          "What the attacker wants: here, passwords."
+        ],
+        [
+          "signals",
+          "[\"urgency\", \"lookalike domain\", \"DMARC fail\", \"fake login page\"]",
+          "The evidence behind the verdict, each traceable to a check."
+        ],
+        [
+          "confidence",
+          "0.96",
+          "Used to decide between automatic response and human review."
+        ]
+      ],
+      "depth": {
+        "beginner": "The AI answers in a fixed form: this is phishing, its goal is stealing passwords, and here are the clues it used, such as the urgent tone, the fake domain and the fake login page. Because the answer always has the same shape, the pipeline can act on it automatically, and a person can see exactly why it was flagged.",
+        "practitioner": "The pipeline validates the output against the schema and cross-checks it with hard rules. High-confidence phishing with corroborating code signals can proceed automatically; low confidence or disagreement between model and rules goes to a human. \"Unsure\" must be an allowed answer, otherwise the model is forced to guess.",
+        "expert": "Log the model input, output and rule results for every verdict so you can evaluate accuracy over time with labelled outcomes. Watch for drift as campaigns change. Thresholds for automatic action should be set from measured precision on your own reports, not chosen by intuition."
+      },
+      "walk": {
+        "why": "A fixed schema turns an opinion into data the pipeline can act on and auditors can review.",
+        "wrong": "Free-text verdicts break automation, and forcing a yes or no answer creates confident mistakes.",
+        "example": "Teams typically auto-handle the clearest cases and route borderline ones to an analyst queue with the model's reasoning attached."
+      }
     },
     {
       "from": "pipe",
       "to": "mail",
       "label": "purge copies",
       "title": "Remove it from every inbox",
-      "text": "The same email usually went to many people. The pipeline finds and pulls every copy and blocks the sender domain.",
+      "text": "The same email usually went to many people. The pipeline finds and pulls every copy and protects anyone who clicked.",
       "payload": [
         [
           "found",
-          "37 inboxes",
-          ""
+          "37 inboxes (illustrative)",
+          "Every copy, matched by sender, subject and link, not just the reported one."
+        ],
+        [
+          "purged",
+          "37",
+          "Moved out of users' reach, kept for evidence."
         ],
         [
           "clicked",
-          "2 users",
-          "Their passwords are reset and sessions revoked."
+          "2 users (illustrative)",
+          "Found in proxy or mail-click logs; they may have entered passwords."
+        ],
+        [
+          "blocked",
+          "micr0soft-help.example",
+          "Added to mail and web block lists to stop new copies and visits."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Phishing emails rarely go to just one person. The pipeline searches every mailbox for the same message and removes all copies, 37 in this example. It also checks who clicked the link: two people did. Their passwords are reset and they are signed out everywhere, in case they typed their password on the fake page. The fake website is blocked so nobody else can reach it.",
+        "practitioner": "Search by several attributes (sender, subject, URLs, attachment hashes) to catch variants. Purge to a recoverable location rather than hard-deleting, in case of a false positive. For users who clicked, check sign-in logs, reset credentials and revoke sessions. Purging and blocking are reversible and often automated for high-confidence verdicts.",
+        "expert": "Resetting a password is not enough if the attacker captured a session cookie or registered their own MFA device; revoke sessions and review new MFA methods and mailbox rules, since forwarding rules are a common persistence method (ATT&CK T1114.003). Scope the purge carefully: over-broad searches can remove legitimate mail."
+      },
+      "walk": {
+        "why": "Removing unopened copies prevents new victims, and protecting those who clicked limits the damage from the ones already caught.",
+        "wrong": "Purging only the reported copy leaves the rest live; resetting passwords without revoking sessions leaves stolen sessions working.",
+        "example": "Mail platforms offer search-and-purge features so security teams can pull a campaign out of every mailbox at once."
+      },
+      "predict": {
+        "question": "The pipeline found 37 copies of the email. Should it delete them permanently straight away?",
+        "reveal": "No. Move them to a recoverable location first. If the verdict turns out to be wrong, legitimate mail can be restored, and the copies remain available as evidence."
+      }
     },
     {
       "from": "pipe",
@@ -135,9 +325,171 @@
         [
           "message",
           "\"Confirmed phishing, removed from 37 inboxes. Thanks!\"",
-          ""
+          "Specific, quick feedback shows the report mattered."
+        ],
+        [
+          "time to verdict",
+          "about 2 minutes (illustrative)",
+          "Speed matters: every minute the email stays live, more people may click."
+        ],
+        [
+          "case",
+          "PHISH-2207 · closed · evidence attached",
+          "Recorded for audits and for spotting repeat campaigns."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Finally the person who reported the email gets a thank-you: it was real, and it has been removed from 37 inboxes. This small step matters. When people see that reporting works, they keep doing it, which makes the whole organisation harder to fool. The case is saved with its evidence so the team can spot the same scam if it returns.",
+        "practitioner": "Automated feedback closes the loop for both malicious and harmless reports; telling someone \"this one was safe, thanks for checking\" is just as important. Record outcomes as labelled data: confirmed verdicts help evaluate and tune the pipeline. Repeat lures and sender infrastructure can be linked into campaigns.",
+        "expert": "Measure reporting rate, time to verdict, time to purge and click rate per campaign. Feed confirmed phishing back into detection rules and awareness training with real, anonymised examples. Keep reporters' identities private in wider communications."
+      },
+      "walk": {
+        "why": "Feedback turns reporting into a habit, which is the cheapest early-warning system an organisation has.",
+        "wrong": "Silence after a report teaches people that reporting is pointless, and repeat campaigns get analysed from scratch every time.",
+        "example": "Security awareness programmes commonly measure how quickly staff report simulated and real phishing, and celebrate good catches."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Learn how a phishing pipeline turns a one-click report into a verified verdict, a purged campaign and a protected user, in minutes.",
+    "thirtySeconds": [
+      "Code checks the facts: SPF, DKIM and DMARC results, and where the links really go in a sandbox.",
+      "An LLM reads the email as untrusted data and returns a structured verdict based on that evidence.",
+      "High-confidence phishing is purged from every inbox, users who clicked are protected, and the reporter hears back."
+    ],
+    "whyItMatters": "Phishing remains one of the most common ways attackers get in, and CISA's guidance treats it as the first phase of the attack cycle to stop. Employees report suspicious emails every day, but manual analysis is slow, so dangerous copies stay in inboxes for hours. Combining exact checks, safe link detonation and AI judgement lets a team respond to every report quickly while keeping humans in charge of uncertain cases.",
+    "analogy": "It works like a post-office inspection desk. A clerk checks the stamp and return address (SPF, DKIM, DMARC), a bomb-disposal box opens the parcel safely (the sandbox), and an experienced inspector reads the letter for tricks (the LLM). If it is a scam, every identical parcel is pulled from delivery.",
+    "audience": "Security analysts handling user-reported email, IT administrators of mail platforms, and engineers automating phishing response.",
+    "minutes": 16,
+    "prerequisites": [
+      "tool-use",
+      "prompt-injection"
+    ],
+    "deepDives": [
+      {
+        "title": "SPF, DKIM and DMARC in one minute",
+        "body": "SPF lets a domain list the servers allowed to send its mail. DKIM adds a cryptographic signature that proves which domain signed the message and that it was not altered. DMARC ties them to the visible From address: it passes when SPF or DKIM passes for a domain aligned with the From domain.\n\nDMARC was updated in May 2026 as RFC 9989, replacing RFC 7489. Among other changes, the old `pct` tag was removed and a `t` (testing) tag added."
+      },
+      {
+        "title": "Why authentication is not trust",
+        "body": "Authentication answers \"did this really come from this domain?\", not \"is this domain honest?\". Attackers register lookalike domains such as micr0soft-help.example and set up perfect authentication for them.\n\nThat is why pipelines also check domain age, lookalike similarity to brands you care about, and what the links actually do."
+      },
+      {
+        "title": "Defending the AI reader",
+        "body": "Some phishing emails now contain hidden instructions aimed at AI filters. Treat the email as untrusted data, give the classifying model no tools, require evidence-based signals in its output, and let hard rules override a lenient verdict when the facts are clear."
+      },
+      {
+        "title": "Reporting is a sensor, not a burden",
+        "body": "Every report is a data point about what is reaching inboxes. Fast, specific feedback keeps people reporting, and confirmed reports become labelled examples for testing the pipeline.\n\nTrack how long it takes from the first report to purging every copy; that number captures most of the value of automation."
+      }
+    ],
+    "production": [
+      {
+        "title": "Cloaked phishing pages",
+        "body": "Kits often show harmless pages to scanners. Vary sandbox network locations and browser fingerprints, and treat a harmless-looking page as inconclusive when other signals are strong."
+      },
+      {
+        "title": "Over-broad purges",
+        "body": "Searching only by subject can remove legitimate mail. Combine sender, URLs and hashes, purge to a recoverable folder, and review large purges before running them."
+      },
+      {
+        "title": "Stolen sessions and MFA",
+        "body": "Users who entered credentials may have lost session cookies or had new MFA methods added. Revoke sessions, review MFA registrations and check for new mailbox forwarding rules."
+      },
+      {
+        "title": "Report floods",
+        "body": "A big campaign can produce hundreds of reports. Deduplicate by message ID and content, analyse once per campaign, and reply to all reporters together."
+      },
+      {
+        "title": "Personal data in emails",
+        "body": "Reported emails can contain personal or confidential information. Limit who can read the analysis mailbox, set retention periods, and make sure any AI service processing the content meets your data-handling rules."
+      }
+    ],
+    "lab": {
+      "title": "Read authentication results and score phishing signals",
+      "intro": "Parse an `Authentication-Results` header, check DMARC alignment in simplified relaxed mode, detect lookalike domains and combine signals into a verdict that can say \"unsure\". Runs offline in Python and TypeScript with tests.",
+      "dir": "labs/phishing"
+    },
+    "takeaways": [
+      "SPF, DKIM and DMARC prove where an email came from, not whether the sender is honest.",
+      "DMARC passes only when SPF or DKIM passes for a domain aligned with the From address.",
+      "Open links only in an isolated sandbox, and treat harmless-looking results from cloaked kits with caution.",
+      "Let code check facts and the LLM judge intent, with the email wrapped as untrusted data.",
+      "Purge every copy, protect users who clicked by revoking sessions, and always thank the reporter."
+    ],
+    "faq": [
+      {
+        "q": "What is DMARC alignment?",
+        "a": "The domain that passed SPF or DKIM must match the domain in the visible From address: the same organisational domain in relaxed mode, or exactly the same domain in strict mode."
+      },
+      {
+        "q": "Which DMARC standard is current?",
+        "a": "RFC 9989, published in May 2026, which obsoletes RFC 7489. It keeps the core alignment model and policies (none, quarantine, reject) and replaces the old percentage tag with a testing tag."
+      },
+      {
+        "q": "Can the LLM decide to delete emails on its own?",
+        "a": "It should only produce a verdict. The pipeline decides actions using that verdict, hard rules and thresholds measured on your own data, with humans reviewing uncertain cases."
+      },
+      {
+        "q": "What should happen to users who clicked?",
+        "a": "Check whether they entered credentials, reset passwords, revoke active sessions, review recently added MFA methods and mailbox rules, and let them know what happened without blame."
+      },
+      {
+        "q": "Should we tell users who clicked?",
+        "a": "Yes, privately and without blame. Explain what happened and what was done to protect their account. Blame discourages people from reporting their own mistakes, which slows down future responses."
+      }
+    ],
+    "related": [
+      "prompt-injection",
+      "soc-triage",
+      "incident-response",
+      "soar-playbook"
+    ]
+  },
+  "quiz": [
+    {
+      "q": "An email passes SPF, DKIM and DMARC for micr0soft-help.example. What does that prove?",
+      "options": [
+        "It is safe to open",
+        "It really came from micr0soft-help.example",
+        "It came from Microsoft",
+        "It contains no links"
+      ],
+      "answer": 1,
+      "explain": "Authentication proves the domain is genuine, not that the domain is trustworthy. Lookalike domains can pass all three."
+    },
+    {
+      "q": "When does DMARC pass?",
+      "options": [
+        "When SPF passes for any domain",
+        "When SPF or DKIM passes for a domain aligned with the From domain",
+        "Only when both SPF and DKIM pass",
+        "When the display name matches the brand"
+      ],
+      "answer": 1,
+      "explain": "One aligned pass is enough. An SPF pass for an unrelated envelope domain does not count."
+    },
+    {
+      "q": "Why is the email body wrapped as untrusted data before the LLM reads it?",
+      "options": [
+        "To save tokens",
+        "Because it may contain instructions aimed at the AI",
+        "To translate it",
+        "Because LLMs cannot read HTML"
+      ],
+      "answer": 1,
+      "explain": "Attackers can hide text telling an AI filter to mark the email as safe. Labelling it as data helps the model treat it as content to analyse."
+    },
+    {
+      "q": "Two users clicked and may have typed their password. What is the strongest response?",
+      "options": [
+        "Send them a warning email",
+        "Reset passwords only",
+        "Reset passwords and revoke active sessions, then review MFA and mailbox rules",
+        "Do nothing if no alert fired"
+      ],
+      "answer": 2,
+      "explain": "Attackers may hold session cookies or have added persistence. Revoking sessions and checking MFA and forwarding rules closes those doors."
     }
   ]
 }

@@ -653,3 +653,61 @@ a.gl:hover::after, a.gl:focus-visible::after {
   .article { padding: 0 8px; }
 }
 @media (hover: none) { .card-3d:hover { transform: none; } }
+
+/* Predict, then reveal */
+.predict { margin: 10px 0 12px; padding: 10px 12px; border-radius: 8px; border: 1px dashed color-mix(in srgb, var(--accent-2) 60%, transparent); background: color-mix(in srgb, var(--accent-2) 8%, transparent); }
+.predict-q { margin: 0 0 8px; font-size: 13.5px; }
+.predict-a p { font-size: 13.5px; margin: 0; color: var(--text); }
+.article .predict summary { cursor: pointer; min-height: 32px; }
+.article .predict p { margin-top: 8px; }
+
+/* ---------- A2: learn hub, path pages, glossary terms, about ---------- */
+.page h2 { font: 700 22px var(--font-sans), sans-serif; margin: 32px 0 10px; }
+.page p, .page li { color: color-mix(in srgb, var(--text) 86%, var(--muted)); line-height: 1.7; }
+.muted { color: var(--muted) !important; }
+.stack-slabs { list-style: none; padding: 0; margin: 14px 0 0; display: flex; flex-direction: column; gap: 8px; perspective: 900px; }
+.slab { display: grid; grid-template-columns: 40px 140px 1fr; gap: 14px; align-items: center; padding: 12px 16px; border-radius: 10px;
+  border: 1px solid var(--line-2); background: linear-gradient(180deg, var(--panel-2), var(--panel)); box-shadow: var(--depth-1);
+  transform: rotateX(8deg); transform-origin: center bottom; transition: transform .25s, box-shadow .25s; }
+.slab:hover { transform: rotateX(0deg) translateY(-2px); box-shadow: var(--depth-2); }
+.slab-n { font: 700 20px var(--font-mono), monospace; color: var(--accent); text-align: center; }
+.slab-name { font: 700 13px var(--font-mono), monospace; letter-spacing: .1em; text-transform: uppercase; }
+.slab-lessons { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
+.slab-lessons a { color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--line-2); }
+.slab-lessons a:hover { color: var(--accent); }
+.path-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.path-card { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: var(--text); }
+.path-card span { color: var(--muted); font-size: 14px; }
+.path-card em { font: normal 12px var(--font-mono), monospace; color: var(--accent); margin-top: auto; }
+.tier { align-self: flex-start; font: 700 10.5px var(--font-mono), monospace; letter-spacing: .1em; padding: 2px 8px; border-radius: 4px; border: 1px solid; }
+.tier.free { color: var(--k-user); border-color: color-mix(in srgb, var(--k-user) 50%, transparent); }
+.tier.pro { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 50%, transparent); }
+.starts { padding-left: 20px; }
+.path-facts { margin-bottom: 20px; }
+.path-facts h2, .term .card-3d h2 { font-size: 16px; margin: 0 0 8px; }
+.path-body { max-width: 860px; }
+.path-lessons { list-style: none; padding: 0; display: grid; gap: 10px; }
+.path-lesson { display: flex; gap: 16px; align-items: flex-start; text-decoration: none; color: var(--text); }
+.pl-n { font: 700 22px var(--font-mono), monospace; color: var(--accent); min-width: 28px; }
+.pl-body { display: flex; flex-direction: column; gap: 4px; }
+.pl-body span { color: var(--muted); font-size: 14px; }
+.pl-body em { font: normal 12px var(--font-mono), monospace; color: var(--accent); }
+.term { max-width: 860px; display: flex; flex-direction: column; gap: 14px; }
+.term-def { font-size: 18px !important; color: var(--text) !important; }
+.gloss b a { color: inherit; text-decoration: none; }
+.gloss b a:hover { text-decoration: underline; }
+.prose-page { max-width: 860px; }
+.prose-page ol, .prose-page ul { padding-left: 22px; }
+.prose-page li { margin-bottom: 8px; }
+@media (max-width: 860px) {
+  .slab { grid-template-columns: 32px 1fr; transform: none; }
+  .slab-lessons { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: reduce) { .slab { transform: none; } }
+
+/* Build guide sub-pages */
+.guide-index { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.guide-card { display: flex; gap: 14px; text-decoration: none; color: var(--text); height: 100%; }
+.guide-h1 { font: 700 clamp(24px, 3vw, 34px)/1.15 var(--font-sans), sans-serif; margin: 6px 0 8px; }
+.guide-summary { font-size: 17px; color: var(--text) !important; }
+.toc a[aria-current="page"] { color: var(--text); background: var(--panel-2); box-shadow: inset 3px 0 0 var(--accent); }

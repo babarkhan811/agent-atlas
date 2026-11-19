@@ -1,39 +1,77 @@
 {
   "id": "mcp",
   "path": "knowledge-protocols",
-  "order": 3,
+  "order": 4,
   "tier": "pro",
   "category": "Protocols",
   "title": "MCP: Model Context Protocol",
   "summary": "One standard plug so any AI app can use any tool server: GitHub, Slack, databases, your own APIs.",
+  "seoTitle": "MCP explained: how AI apps talk to tool servers (2026-07-28 spec)",
+  "seoDescription": "Follow one Model Context Protocol request end to end: stdio, server/discover, per-request _meta, tools/list and tools/call, as defined in the 2026-07-28 spec.",
+  "objectives": [
+    "Name the three MCP roles (host, client, server) and say what each one is responsible for.",
+    "Read the JSON-RPC messages for server/discover, tools/list and tools/call, including the per-request _meta fields.",
+    "Tell a protocol error from a tool execution error and explain why the difference matters to the model."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    {
+      "title": "MCP specification 2026-07-28: Overview (messages, _meta, statelessness, error codes)",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index"
+    },
+    {
+      "title": "MCP specification 2026-07-28: Key changes (changelog)",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/changelog"
+    },
+    {
+      "title": "MCP specification 2026-07-28: server/discover",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/server/discover"
+    },
+    {
+      "title": "MCP specification 2026-07-28: Tools",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools"
+    },
+    {
+      "title": "MCP specification 2026-07-28: stdio transport",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio"
+    },
+    {
+      "title": "MCP: Versioning (current revision)",
+      "url": "https://modelcontextprotocol.io/specification/versioning"
+    },
+    {
+      "title": "A2A blog: A2A joins the Agentic AI Foundation (lists MCP as a sibling project)",
+      "url": "https://a2a-protocol.org/latest/blog/2026/08/27/a-new-chapter-for-a2a-joining-the-agentic-ai-foundation/"
+    }
+  ],
   "nodes": [
     {
       "id": "host",
       "label": "AI app (host)",
       "kind": "app",
       "x": 10,
-      "y": 50
+      "y": 55
     },
     {
       "id": "client",
       "label": "MCP client",
       "kind": "app",
       "x": 36,
-      "y": 50
+      "y": 55
     },
     {
       "id": "server",
       "label": "MCP server",
       "kind": "tool",
       "x": 64,
-      "y": 50
+      "y": 55
     },
     {
       "id": "gh",
       "label": "GitHub API",
       "kind": "external",
       "x": 90,
-      "y": 50
+      "y": 55
     },
     {
       "id": "model",
@@ -47,173 +85,550 @@
     {
       "from": "client",
       "to": "server",
-      "label": "initialize",
-      "title": "Handshake",
-      "text": "MCP messages are JSON-RPC 2.0. Locally the server is a child process talking over stdin/stdout; remote servers use HTTP.",
+      "label": "spawn (stdio)",
+      "title": "The host starts a local server",
+      "text": "For a local server, the client launches it as a child process and talks over standard input and output.",
+      "payload": [
+        [
+          "command",
+          "npx -y @example/github-mcp",
+          "Illustrative launch command from the host's configuration file."
+        ],
+        [
+          "transport",
+          "stdio",
+          "Messages travel over the child process's standard input and output streams."
+        ],
+        [
+          "framing",
+          "one JSON-RPC message per line",
+          "Newline-delimited JSON. A message must not contain embedded newlines."
+        ],
+        [
+          "env",
+          "GITHUB_TOKEN=••••",
+          "stdio servers read credentials from their environment, not from MCP's OAuth flow."
+        ],
+        [
+          "stderr",
+          "free-form logs",
+          "The server may log to stderr; stdout must carry only MCP messages."
+        ]
+      ],
+      "depth": {
+        "beginner": "Your AI app wants to work with GitHub. Instead of having GitHub support built in, it starts a small separate program called an MCP server, which knows how to talk to GitHub. The app and this helper program then chat by passing short text messages back and forth through the program's input and output, a bit like two people passing notes under a door.",
+        "practitioner": "MCP has three roles. The host is the AI application. Inside it, an MCP client manages the connection to one server. The server exposes tools, resources and prompts. With the stdio transport, the client launches the server as a subprocess and exchanges newline-delimited JSON-RPC messages over stdin and stdout. Credentials such as a GitHub token are passed in as environment variables.",
+        "expert": "stdio is the simplest transport and keeps the server on the same machine, which limits network exposure but runs third-party code with your privileges. Treat server installs like any dependency: pin versions, review sources, and sandbox where possible. The spec says stdio servers should not use the HTTP authorization flow; they take credentials from the environment. Servers should exit when stdin closes."
+      },
+      "walk": {
+        "why": "A separate process per integration means one host can use many servers written in any language, and a server can be reused by many hosts.",
+        "wrong": "Installing an unvetted server runs arbitrary code on your machine with your credentials. A server that prints debug text to stdout breaks the protocol stream.",
+        "example": "Coding assistants commonly let you add local MCP servers in a configuration file, each entry naming the command to run and the environment variables to pass."
+      }
+    },
+    {
+      "from": "client",
+      "to": "server",
+      "label": "server/discover",
+      "title": "Ask what the server supports",
+      "text": "The client may first ask the server which protocol versions and features it supports.",
       "payload": [
         [
           "jsonrpc",
           "\"2.0\"",
-          ""
+          "Every MCP message is a JSON-RPC 2.0 message."
         ],
         [
           "id",
-          "1",
-          "Matches a response to its request."
+          "\"discover-1\"",
+          "Pairs the response with this request. MCP forbids a null id."
         ],
         [
           "method",
-          "\"initialize\"",
-          ""
+          "\"server/discover\"",
+          "Servers must implement it; calling it is optional for clients."
         ],
         [
-          "params.protocolVersion",
-          "\"2025-06-18\"",
-          "Both sides agree on a version."
+          "_meta: io.modelcontextprotocol/protocolVersion",
+          "\"2026-07-28\"",
+          "The protocol version this request uses. Required on every request."
         ],
         [
-          "params.clientInfo",
+          "_meta: io.modelcontextprotocol/clientCapabilities",
+          "{ }",
+          "Client features relevant to this request. Required, even when empty."
+        ],
+        [
+          "_meta: io.modelcontextprotocol/clientInfo",
           "{ name: \"my-ai-app\", version: \"1.0\" }",
-          ""
+          "Self-reported identity for logs and display. Not a security control."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Before asking for anything, the app can politely ask the helper: \"Which versions of our shared language do you speak, and what can you do?\" Every message has a small label section with the app's version and abilities attached. This check is optional, but it is a quick way to learn what the server offers in one go.",
+        "practitioner": "In the current revision (2026-07-28) there is no initialize handshake. Instead, every request carries its protocol version and client capabilities in `params._meta` using reserved `io.modelcontextprotocol/` keys. `server/discover` returns supported versions, capabilities and server identity in one call. On stdio it also works as a probe: a server that does not recognise it is probably an older, handshake-based server.",
+        "expert": "Earlier revisions (2025-11-25 and before) used `initialize` plus `notifications/initialized` to fix the version and capabilities for a connection. The 2026-07-28 revision removed that handshake and protocol-level sessions (SEP-2575, SEP-2567). If the server does not support the requested version it returns `UnsupportedProtocolVersion` (-32022) listing supported versions, and the client retries with one of them."
+      },
+      "walk": {
+        "why": "Putting version and capabilities on every request lets any server process handle any request, which makes MCP servers easier to scale behind load balancers.",
+        "wrong": "Clients written for older revisions may still send `initialize`; servers that only speak the new revision will reject it, so dual-version clients need the documented fallback.",
+        "example": "A desktop AI app connecting to both old and new local servers sends `server/discover` first and falls back to the legacy handshake only if the server does not recognise it."
+      }
     },
     {
       "from": "server",
       "to": "client",
-      "label": "capabilities",
-      "title": "The server says what it offers",
-      "text": "Servers can expose tools (actions), resources (readable data) and prompts (templates).",
+      "label": "DiscoverResult",
+      "title": "The server describes itself",
+      "text": "The answer lists supported versions, capabilities and identity, and says how long it can be cached.",
       "payload": [
         [
-          "result.capabilities",
-          "{ tools: {}, resources: {} }",
-          ""
+          "resultType",
+          "\"complete\"",
+          "Every result now states its type; \"complete\" is an ordinary final result."
         ],
         [
-          "result.serverInfo",
-          "{ name: \"github\" }",
-          ""
+          "supportedVersions",
+          "[\"2026-07-28\"]",
+          "Versions the server speaks. The client picks one for later requests."
+        ],
+        [
+          "capabilities",
+          "{ tools: { listChanged: true }, resources: {} }",
+          "Features on offer. Tools are actions; resources are readable data."
+        ],
+        [
+          "_meta: io.modelcontextprotocol/serverInfo",
+          "{ name: \"github\", version: \"2.3.0\" }",
+          "Self-reported server identity, for display and logs only."
+        ],
+        [
+          "instructions",
+          "\"Search before creating duplicate issues.\"",
+          "Optional guidance the host may show the model."
+        ],
+        [
+          "ttlMs · cacheScope",
+          "3600000 · \"public\"",
+          "The client may cache this answer for an hour; shared caches may store it."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The helper replies with a short profile: the language versions it speaks, the kinds of things it can do (here, actions called tools, and readable information called resources), its name, and a tip for the AI. It also says how long this answer stays valid, so the app does not need to ask again every few seconds.",
+        "practitioner": "Capabilities tell the client which method families exist: `tools`, `resources` and `prompts` on the server side. `listChanged: true` means the server can notify subscribers when its tool list changes. `instructions` is optional natural-language guidance. `ttlMs` and `cacheScope` are caching hints added in this revision so clients can avoid repeated discovery calls.",
+        "expert": "`serverInfo` and `clientInfo` are self-asserted; the spec says not to base security decisions on them. Since roots, sampling and logging are deprecated in this revision, new servers should not depend on them. Change notifications now arrive on a `subscriptions/listen` stream rather than a standing connection, and results gained a required `resultType` field."
+      },
+      "walk": {
+        "why": "A single discovery call replaces several probes, and cache hints cut needless traffic for clients that talk to many servers.",
+        "wrong": "Trusting the server's self-reported name for security is a mistake: any server can claim to be \"github\".",
+        "example": "An admin console listing a company's approved MCP servers can show each server's capabilities and version from one discovery call per server."
+      }
     },
     {
       "from": "client",
       "to": "server",
       "label": "tools/list",
-      "title": "Discover tools",
-      "text": "",
+      "title": "Discover the tools",
+      "text": "The client asks which tools the server offers. The request repeats its version and capabilities.",
       "payload": [
         [
           "method",
           "\"tools/list\"",
-          ""
+          "Lists the tools currently available to this caller."
+        ],
+        [
+          "params.cursor",
+          "(omitted on the first page)",
+          "Pagination: pass the previous page's nextCursor to get more."
+        ],
+        [
+          "params._meta",
+          "{ protocolVersion: \"2026-07-28\", clientCapabilities: {} … }",
+          "Repeated on every request because nothing carries over from earlier requests."
         ]
-      ]
+      ],
+      "predict": {
+        "question": "The client already sent its protocol version in server/discover. Does tools/list need to send it again?",
+        "reveal": "Yes. Since the 2026-07-28 revision MCP is stateless: a server must not rely on earlier requests on the same connection, so every request carries its version and capabilities in `_meta`."
+      },
+      "depth": {
+        "beginner": "Now the app asks: \"Which tools do you have?\" It attaches its version label again, because the helper is designed not to remember anything between messages. Each question has to stand on its own, a bit like a call centre where you give your account number every time you call.",
+        "practitioner": "`tools/list` returns the tool definitions available to this caller. The list must not vary per connection, though it may vary with the authorization presented. Large catalogues are paginated with `cursor` and `nextCursor`. Because MCP is stateless, the `_meta` fields are required here too; a request missing them is rejected with -32602 (Invalid params).",
+        "expert": "Servers should return tools in a deterministic order so clients can cache the list and model providers can reuse cached prompt prefixes. Hosts that aggregate several servers should disambiguate tool names, for example by prefixing with a server identifier, because names are only unique within one server."
+      },
+      "walk": {
+        "why": "Listing tools at runtime lets one host work with servers it has never seen before; nothing is hard-coded.",
+        "wrong": "Two servers can both expose a tool called `search`. Without prefixing, the model may call the wrong one.",
+        "example": "A host connected to GitHub and Slack servers presents tools as `github__search` and `slack__search` so the model and the user can tell them apart."
+      }
     },
     {
       "from": "server",
       "to": "client",
       "label": "tool list",
       "title": "Tools with schemas",
-      "text": "The same shape as function calling: name, description, input schema. That's why MCP tools drop straight into any model.",
+      "text": "Each tool has a name, a description and a JSON Schema for its inputs, the same shape models use for function calling.",
       "payload": [
         [
           "tools[0].name",
           "\"create_issue\"",
-          ""
+          "Unique within this server. Allowed characters are letters, digits, _, - and ."
+        ],
+        [
+          "tools[0].description",
+          "\"Open an issue in a repository\"",
+          "What the model reads to decide when to use the tool."
         ],
         [
           "tools[0].inputSchema",
-          "{ repo, title, body }",
-          ""
+          "{ type: \"object\", properties: { repo, title, body }, required: [\"repo\", \"title\"] }",
+          "JSON Schema (2020-12 unless stated) the arguments must match."
         ],
         [
           "tools[1].name",
           "\"search_code\"",
-          ""
+          "A second tool. Order should stay stable between calls."
+        ],
+        [
+          "ttlMs · cacheScope",
+          "300000 · \"private\"",
+          "Cache for five minutes; \"private\" stops shared proxies storing it."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The helper sends back a menu. Each item has a name like create_issue, a plain description of what it does, and a precise form listing the details it needs, such as which repository and what title. This is exactly the kind of tool description an AI model already understands from the tool-use lesson.",
+        "practitioner": "Tool definitions include `name`, optional `title`, `description`, `inputSchema` and optionally `outputSchema` and `annotations`. The schema format matches what model APIs expect for function calling, which is why hosts can pass MCP tools to a model with little translation. Tool annotations are hints only and must be treated as untrusted unless the server is trusted.",
+        "expert": "With Streamable HTTP, a property can carry `x-mcp-header` to be mirrored into an `Mcp-Param-*` header for gateways; clients must drop tools whose annotation breaks the rules. Clients must not auto-fetch remote `$ref` URIs in schemas and should bound schema complexity, since a hostile schema can be used for denial of service."
+      },
+      "walk": {
+        "why": "A shared schema format means a server author writes each tool once and every MCP host can offer it to its model.",
+        "wrong": "Malicious servers can hide instructions in tool descriptions (tool poisoning). Descriptions reach the model, so only connect servers you trust.",
+        "example": "Security teams review new MCP servers' tool descriptions before approval, the same way they review browser extensions."
+      }
     },
     {
       "from": "host",
       "to": "model",
       "label": "prompt + tools",
       "title": "The host gives the tools to the model",
-      "text": "The model doesn't know MCP exists. It just sees tools.",
+      "text": "The model doesn't know MCP exists. The host converts MCP tools into the model API's tool format.",
       "payload": [
         [
           "user",
-          "\"File a bug: dark mode button does nothing\"",
-          ""
+          "\"File a bug: the dark-mode button does nothing\"",
+          "The request from the person using the host app."
+        ],
+        [
+          "tools",
+          "github__create_issue, github__search_code",
+          "MCP tools converted to the model's tool format and prefixed by server."
+        ],
+        [
+          "transport",
+          "(none: the model only sees tools)",
+          "MCP runs between client and server; the model sees ordinary tool definitions."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The app now asks the AI model for help with your request, and hands it the menu of tools from the helper. The model has no idea a separate helper program exists. To the model, these are just tools it may ask the app to use, exactly as in the tool-use lesson.",
+        "practitioner": "The host maps each MCP tool to its model provider's tool definition: name, description and JSON Schema. It decides which servers' tools to include for this task. Fewer, relevant tools improve tool choice and reduce tokens. The model's reply will name a tool and arguments, which the host routes back to the right MCP client.",
+        "expert": "Tool definitions occupy context on every request, so large catalogues hurt cost and accuracy. Options include selecting servers per task, loading tool definitions on demand, and relying on deterministic ordering so prompt caches stay valid. Keep tool output from one server from silently enabling tools on another."
+      },
+      "walk": {
+        "why": "Keeping MCP out of the model's view means any model that supports tool calling can use any MCP server.",
+        "wrong": "Offering every tool from every server to every request confuses the model and makes prompt injection more dangerous.",
+        "example": "A host offers the GitHub server's tools only in coding projects and leaves the email server disconnected unless the user turns it on."
+      },
+      "providers": {
+        "anthropic": "Each MCP tool becomes `{ name, description, input_schema }` in `tools`.",
+        "openai": "Each MCP tool becomes `{ type: \"function\", name, description, parameters }` in the Responses API.",
+        "gemini": "Each MCP tool becomes a function declaration with `name`, `description` and `parameters`."
+      }
     },
     {
       "from": "model",
       "to": "host",
       "label": "tool_use",
       "title": "The model picks an MCP tool",
-      "text": "",
+      "text": "The model asks for a tool call. The host knows which MCP server owns that tool.",
       "payload": [
         [
+          "name",
+          "\"github__create_issue\"",
+          "The prefix tells the host which server owns the tool."
+        ],
+        [
           "input",
-          "{ repo: \"acme/web\", title: \"Dark mode toggle broken\" }",
-          ""
+          "{ repo: \"acme/web\", title: \"Dark mode toggle does nothing\" }",
+          "Arguments chosen by the model, shaped by the inputSchema."
+        ],
+        [
+          "approval",
+          "shown to the user first",
+          "The spec recommends showing tool inputs and letting a person deny the call."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The model decides the create_issue tool fits and fills in the details: which repository and a short title. As always, the model is only asking. A good app now shows you what is about to happen, for example \"Create issue in acme/web?\", and lets you say no.",
+        "practitioner": "The tool call comes back in the provider's tool-use format. The host strips the prefix, finds the MCP client for that server and prepares a `tools/call`. The MCP spec says there should always be a human able to deny tool invocations and that clients should show tool inputs before calling, especially for sensitive operations.",
+        "expert": "Approval policies can depend on tool annotations (read-only or destructive hints), but annotations come from the server and are untrusted unless the server is. Combine them with your own allow-lists. Log the tool name, server, arguments and approver for audit."
+      },
+      "walk": {
+        "why": "Showing the call before it runs catches both model mistakes and manipulated requests, such as an unexpected repository name.",
+        "wrong": "Hosts that auto-approve everything turn any prompt injection into real actions on the user's accounts.",
+        "example": "Many coding assistants ask \"Allow this tool?\" the first time a server's tool runs, with options to allow once or always for that tool."
+      }
     },
     {
       "from": "client",
       "to": "server",
       "label": "tools/call",
       "title": "Call the tool",
-      "text": "The host usually asks you to approve the first call to each server.",
+      "text": "The client sends a tools/call request with the server's own tool name and the arguments.",
       "payload": [
+        [
+          "id",
+          "2",
+          "A new id, different from any request still awaiting a reply."
+        ],
         [
           "method",
           "\"tools/call\"",
-          ""
+          "Runs one tool."
         ],
         [
           "params.name",
           "\"create_issue\"",
-          ""
+          "The server's own (unprefixed) tool name."
         ],
         [
           "params.arguments",
-          "{ repo: \"acme/web\", title: \"Dark mode…\" }",
-          ""
+          "{ repo: \"acme/web\", title: \"Dark mode toggle does nothing\" }",
+          "Validated by the server against the tool's inputSchema."
+        ],
+        [
+          "params._meta",
+          "{ protocolVersion: \"2026-07-28\", clientCapabilities: {} … }",
+          "Required again: every request stands alone."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "With your approval, the app passes the request to the helper program: \"Please run create_issue with these details.\" It again includes its version label, because the helper treats every message as a fresh conversation. The helper checks the details make sense before doing anything, for example that the repository name is real.",
+        "practitioner": "`tools/call` carries the tool `name` and `arguments`. The server must validate inputs, enforce access control and rate-limit calls. If it needs more information first, it can return a `resultType` of `input_required` with `inputRequests` (for example an elicitation form), and the client retries the same call with `inputResponses` under a new request id.",
+        "expert": "Multi Round-Trip Requests replaced server-initiated requests such as sampling and elicitation in this revision. Because there are no sessions, state that must span calls (a shopping cart, a browser tab) should be an explicit handle the server returns and the model passes back as an argument, validated against the caller's authorization each time."
+      },
+      "walk": {
+        "why": "A uniform call format means the host needs no GitHub-specific code at all; the server encapsulates it.",
+        "wrong": "Servers that trust arguments without validation can be tricked into acting on the wrong repository or account.",
+        "example": "An issue-tracker server checks that the requested repository is one the configured token is allowed to modify before calling the API."
+      }
     },
     {
       "from": "server",
       "to": "gh",
       "label": "POST /issues",
       "title": "The server does the real work",
-      "text": "The server holds the GitHub token, not the model or the host.",
+      "text": "The MCP server calls GitHub with its own credential. The host and the model never see it.",
       "payload": [
         [
           "request",
           "POST /repos/acme/web/issues",
-          ""
+          "An ordinary GitHub REST API call made by the server."
+        ],
+        [
+          "auth",
+          "token from GITHUB_TOKEN",
+          "Held only by the server process."
+        ],
+        [
+          "checks",
+          "validate input · rate limit",
+          "Server duties listed in the spec's security considerations."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The helper program now talks to GitHub on your behalf, using the access key it was given when it started. Neither the AI model nor the chat app ever sees that key. To GitHub, this looks like any other program creating an issue.",
+        "practitioner": "This step is outside MCP: it is a normal API call. Least privilege matters here. Give the server a token scoped to only the repositories and permissions it needs. Add timeouts and handle API errors so they can be reported back as tool errors rather than crashes.",
+        "expert": "A server that calls third-party APIs on users' behalf is a natural confused-deputy target. Use per-user credentials where possible, record which user and client triggered each call, and never let tool arguments choose which credential to use. Rotate server credentials regularly and alert on unusual volumes of write calls."
+      },
+      "walk": {
+        "why": "Keeping the credential inside the server means a compromised prompt can, at worst, call the tools the server exposes, not use the key freely.",
+        "wrong": "Broad tokens (admin on all repositories) turn a single bad tool call into a serious incident.",
+        "example": "Teams often create a dedicated bot account with access to one project's repositories for their MCP server instead of using a personal admin token."
+      }
     },
     {
       "from": "server",
       "to": "client",
       "label": "result",
       "title": "Result returns as content",
-      "text": "Write a server once and it works in every MCP-compatible app.",
+      "text": "The result carries content for the model, optional structured data, and an error flag.",
       "payload": [
         [
-          "result.content",
+          "resultType",
+          "\"complete\"",
+          "A final result. \"input_required\" would mean the server needs more input first."
+        ],
+        [
+          "content",
           "[{ type: \"text\", text: \"Created issue #212\" }]",
-          ""
+          "Unstructured content the model reads."
+        ],
+        [
+          "structuredContent",
+          "{ number: 212, url: \"https://github.com/acme/web/issues/212\" }",
+          "Optional machine-readable result; must match the tool's outputSchema if it has one."
+        ],
+        [
+          "isError",
+          "false",
+          "True for tool execution errors such as bad input or a failed API call."
         ]
-      ]
+      ],
+      "predict": {
+        "question": "If GitHub rejects the call because the repository does not exist, should the server send a JSON-RPC error or a normal result?",
+        "reveal": "A normal result with `isError: true` and a clear message, so the model can correct itself. JSON-RPC errors are for protocol problems such as an unknown tool or a malformed request."
+      },
+      "depth": {
+        "beginner": "The helper reports back: \"Created issue #212\", plus a tidy machine-readable version with the issue number and link. If something had gone wrong, such as a misspelled repository, it would say so in the same kind of reply, so the AI could fix the mistake and try again.",
+        "practitioner": "Tool results contain `content` blocks (text, images, audio, resource links or embedded resources) and optionally `structuredContent`. Two error paths exist: protocol errors (unknown tool, malformed request) are JSON-RPC errors, while tool execution errors return a normal result with `isError: true`. Clients should pass execution errors to the model so it can self-correct.",
+        "expert": "Validate `structuredContent` against `outputSchema` and treat all content as untrusted input to the model, since tool results are a prompt-injection channel. A server that returns structured content should also include the serialised JSON as text for older clients. Hosts should also cap how much tool output they pass to the model, because very large results crowd out the conversation."
+      },
+      "walk": {
+        "why": "Separating protocol errors from tool errors lets the model fix fixable mistakes while infrastructure problems surface to developers.",
+        "wrong": "Servers that throw JSON-RPC errors for ordinary failures hide useful feedback from the model, which then guesses or gives up.",
+        "example": "A booking server returns `isError: true` with \"departure date must be in the future\", and the model immediately retries with a corrected date."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Understand how one open protocol lets any AI app use any tool server, and read the actual messages as of the 2026-07-28 specification.",
+    "thirtySeconds": [
+      "MCP has three roles: the host (the AI app), a client inside it, and a server that exposes tools, resources and prompts.",
+      "Messages are JSON-RPC 2.0. Since 2026-07-28 every request carries its own version and capabilities in `_meta`; there is no handshake.",
+      "The client lists tools, the host gives them to the model, and `tools/call` runs the chosen one, with credentials kept inside the server."
+    ],
+    "whyItMatters": "Before MCP, every AI app needed custom code for every integration: one connector for GitHub in app A, another in app B. MCP turns that many-to-many problem into a plug-and-socket standard. For builders it means writing an integration once. For security teams it means a single place to review what tools an AI can reach, which credentials they hold and which actions need approval.",
+    "analogy": "MCP is like USB for AI tools. The laptop (host) has ports (clients), and any device that speaks the standard (server) can plug in. The laptop doesn't need a special driver for each brand of keyboard; it asks the device what it can do and uses it.",
+    "audience": "Developers integrating AI apps with internal systems, platform and security teams approving tool servers, and anyone evaluating MCP servers for their organisation.",
+    "minutes": 18,
+    "prerequisites": [
+      "tool-use",
+      "agent-loop"
+    ],
+    "deepDives": [
+      {
+        "title": "Host, client and server",
+        "body": "The host is the application the user interacts with, such as a chat app or coding assistant. It creates one MCP client per server connection. The server is a separate program, local or remote, that exposes capabilities.\n\nServers offer three kinds of things: tools (actions the model can invoke), resources (data the app can read, identified by URIs) and prompts (reusable templates a user can pick). The host decides what reaches the model."
+      },
+      {
+        "title": "Why MCP became stateless",
+        "body": "Earlier revisions began every connection with an `initialize` handshake and could keep a session. The 2026-07-28 revision removed both: each request carries its protocol version and client capabilities in `_meta`, and servers must not rely on earlier requests.\n\nThe result is that any server instance can answer any request, which suits load-balanced remote servers. State that must span calls becomes an explicit handle passed as a tool argument."
+      },
+      {
+        "title": "Two kinds of errors",
+        "body": "Protocol errors use JSON-RPC error codes: for example -32602 for invalid params or an unknown tool, and MCP-specific codes such as -32022 for an unsupported protocol version.\n\nTool execution errors are normal results with `isError: true`. Keep them for problems the model can act on, like a wrong date format, so it can correct itself."
+      }
+    ],
+    "production": [
+      {
+        "title": "Untrusted servers and tool poisoning",
+        "body": "A server's tool descriptions and results go straight into the model's context. A malicious or compromised server can hide instructions there. Approve servers like software dependencies, pin versions and review descriptions."
+      },
+      {
+        "title": "Over-privileged credentials",
+        "body": "A server holding an admin token turns any successful prompt injection into a major incident. Scope credentials narrowly, prefer per-user tokens, and log which user triggered each call."
+      },
+      {
+        "title": "Version drift",
+        "body": "Clients and servers written for different revisions may not interoperate. The 2026-07-28 revision removed the handshake, sessions and several methods. Test against the versions you support and implement the documented fallback for older servers."
+      },
+      {
+        "title": "Too many tools",
+        "body": "Every connected tool costs context tokens and adds chances for the model to choose wrongly. Enable servers per task, prefix names to avoid collisions, and rely on stable tool ordering so prompt caching works."
+      }
+    ],
+    "lab": {
+      "title": "A tiny MCP-style server and client",
+      "intro": "Build an in-process JSON-RPC server that implements `server/discover`, `tools/list` and `tools/call` following the 2026-07-28 rules: required `_meta` on every request, `resultType`, -32602 for unknown tools and missing metadata, -32022 for unsupported versions, and `isError` results for tool failures. Runs offline with tests in Python and TypeScript.",
+      "dir": "labs/mcp"
+    },
+    "takeaways": [
+      "MCP standardises how AI apps connect to tool servers: host, client and server, speaking JSON-RPC 2.0.",
+      "As of the 2026-07-28 revision there is no handshake; every request carries its version and capabilities in `_meta`.",
+      "`tools/list` returns tools with JSON Schemas; the host hands them to the model, which never sees MCP itself.",
+      "Credentials stay inside the server, and hosts should let people approve tool calls.",
+      "Protocol errors are JSON-RPC errors; tool failures are results with `isError: true` that the model can learn from."
+    ],
+    "faq": [
+      {
+        "q": "Is MCP only for Anthropic models?",
+        "a": "No. MCP is an open protocol; any host can convert MCP tools into the tool format of whichever model it uses. The project is hosted by the Agentic AI Foundation under the Linux Foundation."
+      },
+      {
+        "q": "Does my old MCP server still work?",
+        "a": "Servers built on revisions up to 2025-11-25 use the `initialize` handshake. Clients that support both eras probe with `server/discover` and fall back to the handshake when needed, as the spec describes."
+      },
+      {
+        "q": "What is the difference between a tool and a resource?",
+        "a": "A tool is an action the model can ask to run, such as creating an issue. A resource is data the application can read, identified by a URI, such as a file or a database schema."
+      },
+      {
+        "q": "How do remote MCP servers handle logins?",
+        "a": "Over HTTP, MCP uses OAuth 2.1 with protected resource metadata and audience-bound tokens. The next lesson, Remote MCP, walks through it."
+      }
+    ],
+    "related": [
+      "tool-use",
+      "mcp-remote",
+      "a2a",
+      "prompt-injection"
+    ]
+  },
+  "quiz": [
+    {
+      "q": "In the 2026-07-28 revision, how does a server learn which protocol version a request uses?",
+      "options": [
+        "From the initialize handshake",
+        "From `_meta` on every request",
+        "From the session ID",
+        "It assumes the latest version"
+      ],
+      "answer": 1,
+      "explain": "The handshake and sessions were removed. Each request carries `io.modelcontextprotocol/protocolVersion` in `_meta`."
+    },
+    {
+      "q": "Who converts MCP tools into the format a model understands?",
+      "options": [
+        "The MCP server",
+        "The model provider",
+        "The host application",
+        "The JSON-RPC library"
+      ],
+      "answer": 2,
+      "explain": "The host maps MCP tool definitions to its model API's tool format. The model never sees MCP directly."
+    },
+    {
+      "q": "A tool call fails because the date argument is in the past. How should the server report it?",
+      "options": [
+        "JSON-RPC error -32602",
+        "A result with `isError: true` and a helpful message",
+        "Close the connection",
+        "Return an empty result"
+      ],
+      "answer": 1,
+      "explain": "Execution errors the model can fix belong in a normal result with `isError: true`, so the model can retry correctly."
+    },
+    {
+      "q": "Where should a local stdio server get its GitHub token?",
+      "options": [
+        "From the model's prompt",
+        "From tool arguments",
+        "From its environment",
+        "From the OAuth flow in every request"
+      ],
+      "answer": 2,
+      "explain": "The spec says stdio servers should take credentials from the environment, not from the HTTP authorization flow."
     }
   ]
 }

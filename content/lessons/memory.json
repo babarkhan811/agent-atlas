@@ -5,167 +5,279 @@
   "tier": "pro",
   "category": "Knowledge",
   "title": "How agents remember",
-  "summary": "Short-term memory is the context window. Long-term memory is a database the agent reads and writes.",
+  "summary": "Short-term memory is the context window. Long-term memory is a store the agent reads and writes.",
+  "seoTitle": "How AI agents remember: context windows, compaction and long-term memory",
+  "seoDescription": "See how agents keep track of a conversation, what happens when the context window fills up, and how long-term memory stores facts across sessions.",
+  "objectives": [
+    "Distinguish short-term memory (the context window) from long-term memory (an external store).",
+    "Explain compaction and context clearing, and what is lost when history is summarised.",
+    "Design what an agent should save, recall and forget, including privacy and correctness risks."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    { "title": "Anthropic: Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" },
+    { "title": "Anthropic: Compaction", "url": "https://platform.claude.com/docs/en/build-with-claude/compaction" },
+    { "title": "Anthropic: Memory tool", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool" },
+    { "title": "OpenAI: Conversation state", "url": "https://developers.openai.com/api/docs/guides/conversation-state" },
+    { "title": "Packer et al. (2023): MemGPT, Towards LLMs as Operating Systems", "url": "https://arxiv.org/abs/2310.08560" }
+  ],
   "nodes": [
-    {
-      "id": "user",
-      "label": "You",
-      "kind": "user",
-      "x": 9,
-      "y": 50
-    },
-    {
-      "id": "agent",
-      "label": "Agent",
-      "kind": "app",
-      "x": 38,
-      "y": 50
-    },
-    {
-      "id": "ctx",
-      "label": "Context window",
-      "kind": "data",
-      "x": 70,
-      "y": 18
-    },
-    {
-      "id": "model",
-      "label": "Model",
-      "kind": "model",
-      "x": 90,
-      "y": 55
-    },
-    {
-      "id": "mem",
-      "label": "Memory store",
-      "kind": "data",
-      "x": 62,
-      "y": 85
-    }
+    { "id": "user", "label": "You", "kind": "user", "x": 9, "y": 50 },
+    { "id": "agent", "label": "Agent", "kind": "app", "x": 38, "y": 50 },
+    { "id": "ctx", "label": "Context window", "kind": "data", "x": 70, "y": 18 },
+    { "id": "model", "label": "Model", "kind": "model", "x": 90, "y": 55 },
+    { "id": "mem", "label": "Memory store", "kind": "data", "x": 62, "y": 85 }
   ],
   "steps": [
     {
-      "from": "user",
-      "to": "agent",
-      "label": "message",
+      "from": "user", "to": "agent", "label": "message",
       "title": "Short-term memory = the conversation",
       "text": "Everything said in this session sits in the context window and is re-sent on every call.",
       "payload": [
-        [
-          "message",
-          "\"I'm vegetarian, plan my meals for the week.\"",
-          ""
-        ]
-      ]
+        ["message", "\"I'm vegetarian, plan my meals for the week.\"", "A preference worth remembering beyond this chat."],
+        ["history", "turns 1–40 of this session", "The agent's short-term memory: the whole conversation so far."]
+      ],
+      "depth": {
+        "beginner": "Within one chat, the assistant seems to remember what you said earlier. It does not really remember; the app re-sends the whole conversation every time, as you saw in the first lesson. That pile of text is the agent's short-term memory, called the context window. Here you mention you are vegetarian, which matters for every meal it plans.",
+        "practitioner": "Short-term memory is simply the message history sent with each request: system prompt, earlier turns and tool results. It is precise, because the model sees the exact words, but it is bounded by the context window and grows more expensive every turn.",
+        "expert": "Decide early what kind of state you need: exact transcript (short-term), task scratchpad (notes for the current job), and durable user or domain knowledge (long-term). Mixing them in one ever-growing transcript is the most common cause of slow, costly and forgetful agents."
+      },
+      "walk": {
+        "why": "Re-sending history keeps the model stateless while still giving it full conversational context.",
+        "wrong": "Long sessions get slower and more expensive, and important early details can be crowded out by later noise.",
+        "example": "In a long chat, assistants sometimes forget a constraint from the very first message, such as a dietary preference."
+      }
     },
     {
-      "from": "agent",
-      "to": "ctx",
-      "label": "append",
+      "from": "agent", "to": "ctx", "label": "append",
       "title": "The window fills up",
       "text": "Context windows are large but finite, and longer prompts are slower and cost more.",
       "payload": [
-        [
-          "used",
-          "182k / 200k tokens",
-          ""
-        ],
-        [
-          "risk",
-          "oldest turns get dropped",
-          "The agent 'forgets' the start of the chat."
-        ]
-      ]
+        ["used", "182k of 200k tokens", "Illustrative. Window sizes vary by model and keep growing."],
+        ["tool results", "≈ 60% of the tokens", "Illustrative. Old tool outputs are often the biggest part of an agent's context."],
+        ["risk", "oldest turns dropped or request rejected", "What happens next depends on how the app handles the limit."]
+      ],
+      "depth": {
+        "beginner": "Every message, and every result from a tool, is added to the pile. The pile has a maximum size, the context window. Windows are large now, often hundreds of thousands of tokens, but long-running agents still fill them, and every extra token makes each request slower and more expensive.",
+        "practitioner": "When the context nears the limit, an app must act: the request may fail, or naive apps drop the oldest turns, silently losing instructions and preferences. In agent runs, old tool results usually dominate the token count, so they are the first candidates for clearing.",
+        "expert": "Monitor tokens per request and alert before the limit, not at it. Quality can also degrade well before the limit when relevant facts are buried among irrelevant text, so smaller, cleaner contexts often beat simply using a bigger window."
+      },
+      "walk": {
+        "why": "A finite window forces choices about what the model needs to see right now.",
+        "wrong": "Dropping the oldest turns blindly can delete the system-critical instruction or preference from turn one.",
+        "example": "Coding agents working for hours accumulate huge tool outputs from builds and tests, which crowd out the task description."
+      }
     },
     {
-      "from": "ctx",
-      "to": "model",
-      "label": "summarise",
+      "from": "ctx", "to": "model", "label": "summarise",
       "title": "Compaction",
-      "text": "Before it overflows, the agent asks the model to summarise older turns and swaps the long history for the short summary.",
+      "text": "Before it overflows, older history is summarised and the long history is replaced by the short summary.",
       "payload": [
-        [
-          "before",
-          "182k tokens",
-          ""
-        ],
-        [
-          "after",
-          "14k tokens",
-          ""
-        ],
-        [
-          "kept",
-          "decisions, open tasks, user preferences",
-          "Summaries lose detail; choose what to keep."
-        ]
-      ]
+        ["before", "182k tokens", "Illustrative size of the full history."],
+        ["after", "14k tokens", "Illustrative size after compaction."],
+        ["kept", "decisions, open tasks, user preferences", "Summaries must keep what future turns depend on."],
+        ["cleared", "old tool results already used", "Context clearing removes stale tool output without summarising it."]
+      ],
+      "depth": {
+        "beginner": "Before the pile overflows, the agent asks the model to write a short summary of the older part of the conversation, then replaces that part with the summary. It is like replacing a stack of meeting notes with a one-page recap. You keep the decisions and to-do items, but some detail is lost forever.",
+        "practitioner": "Compaction summarises older context when a threshold is reached; context clearing removes specific old items, such as tool results, without summarising. Several providers now offer server-side compaction and clearing for long-running conversations, so you do not have to write the summarisation loop yourself.",
+        "expert": "Summaries lose detail and can introduce errors, so preserve anything exact (IDs, numbers, file paths, user preferences) in structured notes or long-term memory before compacting. Test compaction on long real runs: check the agent can still complete the task and respects early constraints after the summary."
+      },
+      "walk": {
+        "why": "Summaries keep long tasks going far beyond a single context window.",
+        "wrong": "A summary that drops a key constraint, such as \"vegetarian\", leads to confident but wrong behaviour later.",
+        "example": "Long-running coding agents commonly compact their history after many tool calls and keep a separate notes file for exact details."
+      },
+      "providers": {
+        "anthropic": "Server-side compaction (beta) summarises older context automatically; context editing can clear old tool results.",
+        "openai": "Responses API supports server-side compaction via `context_management` with a `compact_threshold`, or an explicit `/responses/compact` endpoint.",
+        "gemini": "Interactions API can keep history server-side with `previous_interaction_id`; you remain responsible for keeping that history within the model's limits."
+      },
+      "predict": {
+        "question": "After compaction, the agent plans a chicken curry. What most likely went wrong?",
+        "reveal": "The summary dropped the vegetarian preference. That is why durable facts like preferences belong in long-term memory or structured notes, not only in a summary."
+      }
     },
     {
-      "from": "agent",
-      "to": "mem",
-      "label": "save fact",
+      "from": "agent", "to": "mem", "label": "save fact",
       "title": "Long-term memory: write it down",
       "text": "Facts worth keeping across sessions are saved to a store (a file, a database or a vector index).",
       "payload": [
-        [
-          "type",
-          "\"user_preference\"",
-          ""
-        ],
-        [
-          "fact",
-          "\"User is vegetarian\"",
-          ""
-        ],
-        [
-          "saved_at",
-          "2026-11-19",
-          "Dates help you spot stale memories."
-        ]
-      ]
+        ["type", "\"user_preference\"", "Categorising memories helps decide what to recall and when."],
+        ["fact", "\"User is vegetarian\"", "Short, factual, useful in future sessions."],
+        ["source", "user said so on 2026-11-19", "Where the fact came from, so it can be trusted or corrected."],
+        ["consent", "memory enabled by user", "Storing personal data needs a clear user choice."]
+      ],
+      "depth": {
+        "beginner": "Some facts are worth keeping beyond this chat, like your being vegetarian. The agent writes that fact into a separate memory store, like jotting it in a notebook that survives after the conversation ends. It also notes when and how it learned the fact, so it can be checked or corrected later.",
+        "practitioner": "Long-term memory is an external store the agent reads and writes through tools: files, a database or a vector index. Save short, specific facts with type, source and date rather than raw transcripts. Some providers offer a memory tool where the model manages memory files and your application performs the actual storage.",
+        "expert": "Memory writes are a security boundary: an indirect prompt injection that writes a false \"fact\" persists across sessions. Validate what can be saved, separate user-stated facts from inferred ones, attach provenance, and give users a way to view and delete their memories. Personal data in memory falls under your privacy obligations."
+      },
+      "walk": {
+        "why": "A small, curated store keeps useful facts available without carrying entire old conversations.",
+        "wrong": "Saving everything creates a noisy, privacy-sensitive store; saving injected content poisons future sessions.",
+        "example": "Consumer assistants with memory features let users review and delete what has been remembered about them."
+      },
+      "providers": {
+        "anthropic": "The memory tool (`memory_20250818`) lets the model create, read, update and delete memory files; your application handles the storage operations.",
+        "openai": "Durable state can be kept with the Conversations API (`conversation`), or by storing facts yourself and adding them to `instructions` or `input`.",
+        "gemini": "No dedicated memory store is assumed here; store facts in your own database and add them to the request, or keep history with `previous_interaction_id`."
+      }
     },
     {
-      "from": "user",
-      "to": "agent",
-      "label": "new session",
+      "from": "user", "to": "agent", "label": "new session",
       "title": "Days later: a fresh conversation",
       "text": "The context window is empty again. Without long-term memory the agent would have to ask everything again.",
       "payload": [
-        [
-          "message",
-          "\"Suggest a dinner recipe.\"",
-          ""
-        ]
-      ]
+        ["message", "\"Suggest a dinner recipe.\"", "No mention of diet this time."],
+        ["history", "[ ] (new session)", "Short-term memory starts empty."]
+      ],
+      "depth": {
+        "beginner": "Days later you start a new chat and simply ask for a dinner recipe. The new conversation starts empty: the earlier chat is not sent again. Without the notebook, the assistant would not know you are vegetarian and might suggest a beef stew.",
+        "practitioner": "Each new session starts with a fresh context. Whatever the agent should know must be loaded explicitly: from long-term memory, user profile data, or retrieved documents. Decide at session start what to load and what to fetch on demand.",
+        "expert": "Load a small, high-value profile at session start (a few stable preferences), and retrieve everything else on demand. Loading too much memory upfront wastes tokens and can bias the model toward stale information."
+      },
+      "walk": {
+        "why": "Fresh sessions keep contexts small and avoid carrying stale or irrelevant history forward.",
+        "wrong": "Without memory, users must repeat themselves; with too much memory, old facts can override what the user says now.",
+        "example": "A support agent that remembers a customer's product model avoids asking the same questions on every ticket."
+      }
     },
     {
-      "from": "mem",
-      "to": "agent",
-      "label": "recall",
+      "from": "mem", "to": "agent", "label": "recall",
       "title": "Recall relevant memories",
       "text": "The agent searches memory for things related to the request and loads the matches into the prompt.",
       "payload": [
-        [
-          "matches",
-          "[\"User is vegetarian\"]",
-          ""
-        ]
-      ]
+        ["query", "\"dinner recipe, food preferences\"", "What the agent looks for in memory."],
+        ["matches", "[\"User is vegetarian\" (2026-11-19, user-stated)]", "Relevant memories with their source and date."],
+        ["not loaded", "\"Asked about flights to Lahore\" (unrelated)", "Irrelevant memories stay out of the prompt."]
+      ],
+      "depth": {
+        "beginner": "Before answering, the agent checks its notebook for anything relevant to cooking and food. It finds \"vegetarian\" and brings that note into the conversation. It leaves out unrelated notes, like an old question about flights, so the AI is not distracted.",
+        "practitioner": "Recall is retrieval: search the memory store by relevance (keywords, embeddings or categories) and add only matching items to the prompt, with their source and date. This is the same technique as RAG, applied to the agent's own notes instead of documents.",
+        "expert": "Rank by relevance and recency, and prefer user-stated facts over inferred ones. Let the current message override memory: if a user says \"I eat fish now\", update the store rather than arguing from old notes. Log which memories were used for each answer so mistakes can be traced."
+      },
+      "walk": {
+        "why": "Loading only relevant memories keeps the prompt small and focused.",
+        "wrong": "Recalling stale or wrong memories makes the agent confidently out of date.",
+        "example": "A sales assistant recalls a client's preferred meeting times before suggesting a slot."
+      },
+      "predict": {
+        "question": "Why not simply load every saved memory into every conversation?",
+        "reveal": "It wastes tokens, slows requests, and can distract or mislead the model with irrelevant or outdated facts. Recall should be selective, just like retrieval in RAG."
+      }
     },
     {
-      "from": "agent",
-      "to": "model",
-      "label": "prompt + memories",
+      "from": "agent", "to": "model", "label": "prompt + memories",
       "title": "Personalised without asking again",
       "text": "Memory is just more context. The skill is deciding what to save, what to recall and when to forget.",
       "payload": [
-        [
-          "reply",
-          "\"How about a chickpea and spinach curry?\"",
-          ""
-        ]
-      ]
+        ["memories", "<memory>User is vegetarian (stated 2026-11-19)</memory>", "Recalled facts, labelled so the model knows where they came from."],
+        ["reply", "\"How about a chickpea and spinach curry?\"", "Personalised using the recalled preference."]
+      ],
+      "depth": {
+        "beginner": "The agent sends your request plus the note \"vegetarian\" to the model, which suggests a chickpea and spinach curry. You did not have to repeat yourself. Under the hood, memory is nothing magical: it is extra text the agent chose to include. The real skill is choosing what to save, what to bring back and what to forget.",
+        "practitioner": "Recalled memories are just more context, labelled with source and date. Keep them separate from instructions so a stored fact cannot act like a command. Offer users controls to view, correct and delete memories, and expire facts that may change.",
+        "expert": "Memory systems need the same engineering as any data store: schemas, retention policies, access control, audit logs and tests. Evaluate whether memory actually improves outcomes; badly managed memory can make agents worse than stateless ones."
+      },
+      "walk": {
+        "why": "Selective memory gives continuity without the cost and risk of replaying entire histories.",
+        "wrong": "Treating memories as instructions lets a poisoned memory steer every future session.",
+        "example": "Personal assistants that remember a user's time zone schedule meetings correctly without asking each time."
+      }
+    }
+  ],
+  "article": {
+    "promise": "Understand how agents keep track of what matters: short-term context, compaction when it overflows, and long-term memory that survives between sessions.",
+    "thirtySeconds": [
+      "Short-term memory is the conversation re-sent with every request; it is precise but limited by the context window.",
+      "When the window fills, compaction summarises older history and clearing removes stale tool results, at the cost of some detail.",
+      "Long-term memory is an external store of short facts the agent saves and later recalls selectively, like RAG over its own notes."
+    ],
+    "whyItMatters": "Agents that forget frustrate users, and agents that remember badly can be wrong, expensive or even dangerous. Memory design decides whether a long task finishes, whether a returning user has to repeat themselves, and whether a planted false fact can follow a user for weeks. For security automation, memory also holds case notes and context that must be accurate and auditable.",
+    "analogy": "A consultant with a desk and a filing cabinet. The desk holds today's papers (context window); when it overflows, they write a recap and clear the desk (compaction). Important facts go into the filing cabinet (long-term memory), and they pull out only the relevant folders for each new client meeting.",
+    "audience": "Developers building assistants or long-running agents, product managers designing personalisation, and security reviewers assessing what agents store.",
+    "minutes": 14,
+    "prerequisites": ["llm-call", "agent-loop"],
+    "deepDives": [
+      {
+        "title": "Three kinds of agent state",
+        "body": "The transcript is the exact recent conversation. A scratchpad holds working notes for the current task, such as a plan or a list of files changed. Long-term memory stores durable facts about the user or domain.\n\nKeeping these separate makes agents cheaper and more reliable, because each can be managed, trimmed and audited differently."
+      },
+      {
+        "title": "Compaction versus clearing",
+        "body": "Compaction replaces older history with a summary: good for keeping the gist of a long task, but lossy. Clearing removes specific items, typically old tool results, without summarising: good when the result has already been used.\n\nMany long-running agents use both, plus a notes file for exact details that must survive."
+      },
+      {
+        "title": "Memory as a security surface",
+        "body": "If an agent can write to long-term memory while reading untrusted content, a prompt injection can plant false facts that persist across sessions.\n\nRecord the source of every memory, restrict what can be saved from untrusted contexts, and let users inspect and delete what is stored."
+      },
+      {
+        "title": "A checklist for what to save",
+        "body": "Before saving a memory, ask four questions. Will it be useful in a future session? Is it short and specific, such as \"prefers vegetarian meals\" rather than a paragraph of chat? Do we know where it came from, and did the user state it rather than the agent guess it? Is it safe and appropriate to store, with no passwords, payment details or sensitive data the user did not agree to keep?\n\nIf any answer is no, keep the information in the current conversation only. Research systems such as MemGPT explored letting the model manage its own memory tiers; whichever design you choose, these checks still apply."
+      }
+    ],
+    "production": [
+      {
+        "title": "Lossy summaries",
+        "body": "Compaction can silently drop a constraint or exact value. Save exact details in structured notes before compacting, and test long runs end to end."
+      },
+      {
+        "title": "Poisoned memories",
+        "body": "Injected text can be saved as a fact and influence future sessions. Separate user-stated from inferred facts and block memory writes from untrusted contexts unless reviewed."
+      },
+      {
+        "title": "Privacy and retention",
+        "body": "Memories often contain personal data. Get clear consent, set retention periods, and provide view, correct and delete controls."
+      },
+      {
+        "title": "Stale facts",
+        "body": "Preferences and situations change. Date memories, prefer recent user statements, and expire facts that are likely to change."
+      },
+      {
+        "title": "Cross-user leakage",
+        "body": "A memory store shared by mistake across users or tenants can reveal one person's facts to another. Scope every read and write to the current user and test isolation explicitly."
+      }
+    ],
+    "takeaways": [
+      "Short-term memory is the re-sent conversation, bounded by the context window.",
+      "Compaction and clearing keep long tasks going but lose detail; save exact facts separately.",
+      "Long-term memory is an external store of short, sourced facts recalled selectively.",
+      "Memory writes are a security boundary; injected facts can persist.",
+      "Give users control: view, correct and delete what the agent remembers."
+    ],
+    "faq": [
+      { "q": "Does a bigger context window solve memory?", "a": "It helps long tasks, but every turn still re-sends everything, so cost and latency grow, and nothing survives a new session. Long-term memory and good context management are still needed." },
+      { "q": "Is long-term memory the same as fine-tuning?", "a": "No. Memory stores facts outside the model and adds them to prompts. Fine-tuning changes the model's weights and is not a good way to store changing personal facts." },
+      { "q": "What should an agent save?", "a": "Short, durable, useful facts with a source and date, such as stated preferences or decisions. Avoid raw transcripts, secrets and anything copied from untrusted content." },
+      { "q": "How is recall different from RAG?", "a": "It is the same technique: retrieving relevant text to add to the prompt. RAG searches documents; memory recall searches the agent's own saved notes." }
+    ],
+    "related": ["rag", "context-caching", "agent-loop", "prompt-injection"]
+  },
+  "quiz": [
+    {
+      "q": "What is an agent's short-term memory?",
+      "options": ["The model's weights", "The conversation history re-sent with each request", "A database of facts", "The provider's server logs"],
+      "answer": 1,
+      "explain": "Short-term memory is the message history in the context window, re-sent on every call."
+    },
+    {
+      "q": "What is the main risk of compaction?",
+      "options": ["It increases cost", "The summary can drop details that later turns depend on", "It deletes long-term memory", "It disables tools"],
+      "answer": 1,
+      "explain": "Summaries are lossy. Exact facts and constraints should be saved separately before compacting."
+    },
+    {
+      "q": "An agent reads a web page and saves \"the user wants all invoices sent to x@evil.example\" as a memory. What happened?",
+      "options": ["Correct personalisation", "A prompt injection poisoned long-term memory", "Compaction", "A context overflow"],
+      "answer": 1,
+      "explain": "Untrusted content wrote a false fact that would persist across sessions. Memory writes need provenance and restrictions."
+    },
+    {
+      "q": "Why recall memories selectively instead of loading them all?",
+      "options": ["Providers limit memories to three", "Irrelevant memories waste tokens and can mislead the model", "Memories expire after recall", "It is required for compaction"],
+      "answer": 1,
+      "explain": "Like RAG, recall should add only relevant facts, keeping prompts small, cheap and focused."
     }
   ]
 }

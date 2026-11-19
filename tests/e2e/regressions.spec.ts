@@ -1,4 +1,6 @@
 // One regression test per bug in §1 of the product brief.
+import fs from "node:fs";
+import path from "node:path";
 import { expect, test } from "@playwright/test";
 
 const MCP = "/learn/knowledge-protocols/mcp/";
@@ -74,10 +76,13 @@ test("bug 8: keyboard access: skip link, view tabs, focusable diagram nodes", as
   await expect(page.getByRole("tab", { name: "≡ SEQUENCE" })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("ArrowLeft");
 
-  const github = page.getByRole("button", { name: "GitHub API API" });
-  await github.focus();
+  // Activating a node jumps to the first message that involves it (computed from the lesson file).
+  const mcp = JSON.parse(fs.readFileSync(path.join(process.cwd(), "content/lessons/mcp.json"), "utf8"));
+  const ext = mcp.nodes.find((n: { kind: string }) => n.kind === "external");
+  const first = mcp.steps.findIndex((s: { from: string; to: string }) => s.from === ext.id || s.to === ext.id) + 1;
+  await page.getByRole("button", { name: `${ext.label} API` }).focus();
   await page.keyboard.press("Enter");
-  await expect(page.locator(".msg-no")).toContainText("MSG 08");       // first message involving GitHub API
+  await expect(page.locator(".msg-no")).toContainText(`MSG ${String(first).padStart(2, "0")}`);
   await expect(page.getByRole("button", { name: "Dark theme" })).toHaveAttribute("aria-pressed", "true");
 });
 
@@ -93,15 +98,17 @@ test("bug 9: canonical URL, sitemap and robots", async ({ page, request }) => {
   await page.goto(MCP);
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/learn\/knowledge-protocols\/mcp\/$/);
   const sitemap = await (await request.get("/sitemap.xml")).text();
-  expect(sitemap.match(/<loc>/g)?.length).toBe(24);
+  expect(sitemap.match(/<loc>/g)!.length).toBeGreaterThanOrEqual(24);
+  expect(sitemap).toContain("/learn/knowledge-protocols/mcp/</loc>");
+  expect(sitemap).toContain("<lastmod>");
   expect(await (await request.get("/robots.txt")).text()).toContain("Sitemap:");
 });
 
 test.fixme("bug 10: Pro content never reaches unentitled users (server-side gating ships in M5)", async () => {});
 
 test("bug 11: the guide's sample handles unknown tools and rate limits", async ({ page }) => {
-  await page.goto("/guide/");
-  const code = page.locator("#code pre");
+  await page.goto("/guide/reference-implementation/");
+  const code = page.locator("#code-panel pre");
   await expect(code).toContainText("unknown tool");
   await expect(code).toContainText("hourly limit reached");
   await expect(code).toContainText("def validate(");

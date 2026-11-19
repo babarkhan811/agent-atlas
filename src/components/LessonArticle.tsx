@@ -86,6 +86,12 @@ export function LessonArticle({ lesson, index, glossary }: Props) {
                 </p>
               </div>
             </div>
+            {s.predict && (
+              <details className="predict">
+                <summary><b>Predict, then reveal:</b> <Inline text={s.predict.question} /></summary>
+                <Prose text={s.predict.reveal} />
+              </details>
+            )}
             {s.depth && s.walk ? (
               <div className="walk-body">
                 <h4>What happens</h4>

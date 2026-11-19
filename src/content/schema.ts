@@ -126,9 +126,23 @@ export const PathSchema = z.object({
   title: z.string().min(1),
   tier: z.enum(["free", "pro"]),
   description: z.string().min(1),
+  // Path landing page (A2). Prose fields use the lesson prose markup.
+  outcome: z.string().optional(),
+  audience: z.string().optional(),
+  build: z.string().optional(),
+  prerequisites: z.string().optional(),
+  body: z.string().optional(),
 });
 
-export const GlossaryTermSchema = z.object({ slug, term: z.string().min(1), definition: z.string().min(1) });
+export const GlossaryTermSchema = z.object({
+  slug,
+  term: z.string().min(1),
+  definition: z.string().min(1),
+  // Term page (A2): 60–120 words, an example, and the lesson step that shows it.
+  body: z.string().optional(),
+  example: z.string().optional(),
+  seeIn: z.object({ lesson: slug, step: z.number().int().positive() }).optional(),
+});
 
 export type Kind = (typeof KINDS)[number];
 export type PathId = (typeof PATH_IDS)[number];

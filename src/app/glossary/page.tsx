@@ -17,7 +17,7 @@ export default function GlossaryPage() {
       <div className="lesson-head"><h1>Glossary</h1><p>The words you&apos;ll hit most often, in plain English.</p></div>
       <div className="gloss">
         {loadGlossary().map((t) => (
-          <div key={t.slug} id={t.slug}><b>{t.term}</b><span>{t.definition}</span></div>
+          <div key={t.slug} id={t.slug}><b><Link href={`/glossary/${t.slug}/`}>{t.term}</Link></b><span>{t.definition}</span></div>
         ))}
       </div>
     </PageShell>
