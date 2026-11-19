@@ -1,0 +1,161 @@
+{
+  "id": "multi-agent",
+  "path": "reliable-agents",
+  "order": 2,
+  "tier": "pro",
+  "category": "Agents",
+  "title": "Multi-agent teams",
+  "summary": "An orchestrator splits a big job across specialist agents, each with its own context.",
+  "nodes": [
+    {
+      "id": "user",
+      "label": "You",
+      "kind": "user",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "orch",
+      "label": "Orchestrator",
+      "kind": "app",
+      "x": 36,
+      "y": 50
+    },
+    {
+      "id": "research",
+      "label": "Researcher",
+      "kind": "model",
+      "x": 72,
+      "y": 15
+    },
+    {
+      "id": "writer",
+      "label": "Writer",
+      "kind": "model",
+      "x": 88,
+      "y": 50
+    },
+    {
+      "id": "review",
+      "label": "Reviewer",
+      "kind": "guard",
+      "x": 72,
+      "y": 85
+    }
+  ],
+  "steps": [
+    {
+      "from": "user",
+      "to": "orch",
+      "label": "task",
+      "title": "A job too big for one context",
+      "text": "",
+      "payload": [
+        [
+          "task",
+          "\"Write a market report on AI note-taking apps\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "orch",
+      "to": "research",
+      "label": "subtask",
+      "title": "Plan and delegate",
+      "text": "The orchestrator breaks the job into parts. Each sub-agent starts with a clean, focused context instead of one huge messy one.",
+      "payload": [
+        [
+          "brief",
+          "\"Find 8 competitors: pricing, features, users\"",
+          "Briefs must be self-contained; sub-agents can't see the main chat."
+        ],
+        [
+          "tools",
+          "web_search, fetch_page",
+          "Only what this role needs."
+        ]
+      ]
+    },
+    {
+      "from": "research",
+      "to": "orch",
+      "label": "findings",
+      "title": "Return a summary, not everything",
+      "text": "The researcher might read 40 pages but returns a short report. That keeps the orchestrator's context small.",
+      "payload": [
+        [
+          "read",
+          "40 pages · 210k tokens",
+          ""
+        ],
+        [
+          "returned",
+          "1.8k-token table",
+          "Condensing is the main benefit of sub-agents."
+        ]
+      ]
+    },
+    {
+      "from": "orch",
+      "to": "writer",
+      "label": "draft",
+      "title": "Hand off to a writer",
+      "text": "",
+      "payload": [
+        [
+          "input",
+          "findings table + outline + tone guide",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "writer",
+      "to": "review",
+      "label": "draft v1",
+      "title": "Independent review",
+      "text": "A separate agent with a critical brief catches mistakes the writer can't see in its own work.",
+      "payload": [
+        [
+          "checks",
+          "facts vs sources · missing competitors · claims without data",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "review",
+      "to": "orch",
+      "label": "3 issues",
+      "title": "Feedback loops back",
+      "text": "The orchestrator decides whether to send it back for another round or accept it.",
+      "payload": [
+        [
+          "issues",
+          "price outdated · 1 uncited claim · missing summary",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "orch",
+      "to": "user",
+      "label": "final report",
+      "title": "Delivered",
+      "text": "Multi-agent setups use several times more tokens than one agent. Use them when the task really splits into independent parts.",
+      "payload": [
+        [
+          "agents",
+          "3 · 2 review rounds",
+          ""
+        ],
+        [
+          "tokens",
+          "≈ 4× a single agent",
+          ""
+        ]
+      ]
+    }
+  ]
+}

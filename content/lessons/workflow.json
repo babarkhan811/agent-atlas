@@ -1,0 +1,162 @@
+{
+  "id": "workflow",
+  "path": "reliable-agents",
+  "order": 1,
+  "tier": "pro",
+  "category": "Automation",
+  "title": "AI workflow automation",
+  "summary": "A fixed pipeline (trigger → steps) with an LLM doing one smart step in the middle.",
+  "nodes": [
+    {
+      "id": "mail",
+      "label": "Inbox",
+      "kind": "external",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "engine",
+      "label": "Automation engine",
+      "kind": "app",
+      "x": 38,
+      "y": 50
+    },
+    {
+      "id": "llm",
+      "label": "LLM classifier",
+      "kind": "model",
+      "x": 62,
+      "y": 14
+    },
+    {
+      "id": "crm",
+      "label": "CRM",
+      "kind": "tool",
+      "x": 90,
+      "y": 40
+    },
+    {
+      "id": "slack",
+      "label": "Team chat",
+      "kind": "tool",
+      "x": 76,
+      "y": 86
+    }
+  ],
+  "steps": [
+    {
+      "from": "mail",
+      "to": "engine",
+      "label": "webhook",
+      "title": "Trigger: a new email arrives",
+      "text": "The inbox calls a webhook URL the moment a message lands. No polling needed.",
+      "payload": [
+        [
+          "event",
+          "\"message.received\"",
+          ""
+        ],
+        [
+          "from",
+          "\"sara@bigco.com\"",
+          ""
+        ],
+        [
+          "subject",
+          "\"Pricing for 200 seats?\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "engine",
+      "to": "llm",
+      "label": "classify",
+      "title": "The AI step",
+      "text": "The LLM gets one narrow job with a strict JSON output schema, so the next steps can rely on its answer.",
+      "payload": [
+        [
+          "instruction",
+          "\"Classify this email.\"",
+          ""
+        ],
+        [
+          "output_schema",
+          "{ category: enum, urgency: 1-5, summary: string }",
+          "Structured output = no parsing surprises."
+        ]
+      ]
+    },
+    {
+      "from": "llm",
+      "to": "engine",
+      "label": "JSON",
+      "title": "Structured result",
+      "text": "",
+      "payload": [
+        [
+          "category",
+          "\"sales_lead\"",
+          ""
+        ],
+        [
+          "urgency",
+          "4",
+          ""
+        ],
+        [
+          "summary",
+          "\"Wants pricing for 200 seats\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "engine",
+      "to": "crm",
+      "label": "create lead",
+      "title": "Branch: sales lead → CRM",
+      "text": "Plain if/else logic routes the result. Support emails would go to a ticket queue instead.",
+      "payload": [
+        [
+          "lead",
+          "{ name: \"Sara\", company: \"BigCo\", seats: 200 }",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "engine",
+      "to": "slack",
+      "label": "notify",
+      "title": "Tell the team",
+      "text": "",
+      "payload": [
+        [
+          "message",
+          "\"🔥 New lead (urgency 4): BigCo wants 200 seats\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "engine",
+      "to": "mail",
+      "label": "run log",
+      "title": "Workflow vs agent",
+      "text": "A workflow follows a path you designed; an agent chooses its own path. Workflows are cheaper, faster and predictable, so use them when you know the steps.",
+      "payload": [
+        [
+          "run",
+          "5 steps · 1.4s · 1 LLM call",
+          ""
+        ],
+        [
+          "status",
+          "succeeded",
+          "Failed runs should retry and alert."
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "id": "incident-response",
+  "path": "security",
+  "order": 6,
+  "tier": "pro",
+  "category": "Cybersecurity automation",
+  "title": "Incident response with an AI co-pilot",
+  "summary": "During an attack, an agent follows the playbook, runs the investigation and keeps the timeline while people make the calls.",
+  "nodes": [
+    {
+      "id": "lead",
+      "label": "Incident lead",
+      "kind": "user",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "agent",
+      "label": "IR agent",
+      "kind": "app",
+      "x": 36,
+      "y": 50
+    },
+    {
+      "id": "logs",
+      "label": "Logs (SIEM)",
+      "kind": "data",
+      "x": 66,
+      "y": 12
+    },
+    {
+      "id": "idp",
+      "label": "Identity provider",
+      "kind": "tool",
+      "x": 90,
+      "y": 50
+    },
+    {
+      "id": "guard",
+      "label": "Approval gate",
+      "kind": "guard",
+      "x": 66,
+      "y": 88
+    }
+  ],
+  "steps": [
+    {
+      "from": "lead",
+      "to": "agent",
+      "label": "open incident",
+      "title": "Start the playbook",
+      "text": "SOAR playbooks turn response plans into steps. The agent handles the parts that need judgement and summarising.",
+      "payload": [
+        [
+          "incident",
+          "\"Impossible travel login: CFO account\"",
+          ""
+        ],
+        [
+          "playbook",
+          "account-compromise v3",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "logs",
+      "label": "hunt",
+      "title": "Scope the blast radius",
+      "text": "The agent writes and runs log queries: what did this account do since the suspicious login?",
+      "payload": [
+        [
+          "query",
+          "sign-ins + mailbox rules + file access, last 72h",
+          ""
+        ],
+        [
+          "found",
+          "new forwarding rule to an outside address",
+          "Attackers use this to keep reading email."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "guard",
+      "label": "propose containment",
+      "title": "Propose, don't just do",
+      "text": "Disabling a CFO's account during a deal is a business decision. Destructive or disruptive steps wait for approval.",
+      "payload": [
+        [
+          "plan",
+          "revoke sessions · reset password · remove forwarding rule · require new MFA",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "guard",
+      "to": "idp",
+      "label": "approved",
+      "title": "Contain",
+      "text": "",
+      "payload": [
+        [
+          "approved by",
+          "incident lead",
+          ""
+        ],
+        [
+          "result",
+          "sessions revoked · rule removed",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "lead",
+      "label": "timeline + report",
+      "title": "Document as you go",
+      "text": "The agent keeps a timestamped timeline of every finding and action, then drafts the post-incident report and lessons learned.",
+      "payload": [
+        [
+          "timeline",
+          "14 events, 09:02 → 10:47",
+          ""
+        ],
+        [
+          "next",
+          "check other accounts for the same rule · train finance team",
+          ""
+        ]
+      ]
+    }
+  ]
+}

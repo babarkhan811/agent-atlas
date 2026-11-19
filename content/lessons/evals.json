@@ -1,0 +1,148 @@
+{
+  "id": "evals",
+  "path": "reliable-agents",
+  "order": 5,
+  "tier": "pro",
+  "category": "Production",
+  "title": "Testing agents with evals",
+  "summary": "You can't unit-test a vibe. Evals score an agent on real tasks so changes don't silently make it worse.",
+  "nodes": [
+    {
+      "id": "cases",
+      "label": "Test cases",
+      "kind": "data",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "agent",
+      "label": "Agent",
+      "kind": "app",
+      "x": 36,
+      "y": 50
+    },
+    {
+      "id": "code",
+      "label": "Code checks",
+      "kind": "guard",
+      "x": 66,
+      "y": 14
+    },
+    {
+      "id": "judge",
+      "label": "LLM judge",
+      "kind": "model",
+      "x": 66,
+      "y": 86
+    },
+    {
+      "id": "dash",
+      "label": "Results",
+      "kind": "data",
+      "x": 90,
+      "y": 50
+    }
+  ],
+  "steps": [
+    {
+      "from": "cases",
+      "to": "agent",
+      "label": "120 tasks",
+      "title": "A fixed set of real tasks",
+      "text": "Collect real user requests, including the ones that failed before. Each has a way to check success.",
+      "payload": [
+        [
+          "case",
+          "\"Refund order #5521 (damaged item)\"",
+          ""
+        ],
+        [
+          "expected",
+          "refund issued · customer emailed · ≤ $200",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "code",
+      "label": "trace",
+      "title": "Check what can be checked with code",
+      "text": "Exact checks are cheap and reliable: right tool called, valid JSON, tests pass, under budget.",
+      "payload": [
+        [
+          "called issue_refund",
+          "✓",
+          ""
+        ],
+        [
+          "amount ≤ 200",
+          "✓",
+          ""
+        ],
+        [
+          "turns ≤ 10",
+          "✓ (6)",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "judge",
+      "label": "reply",
+      "title": "Use a model for fuzzy qualities",
+      "text": "For tone, helpfulness or accuracy, a second model grades against a written rubric. Spot-check the judge against human ratings.",
+      "payload": [
+        [
+          "rubric",
+          "polite · explains next steps · no false promises",
+          ""
+        ],
+        [
+          "score",
+          "4 / 5",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "judge",
+      "to": "dash",
+      "label": "scores",
+      "title": "Aggregate",
+      "text": "",
+      "payload": [
+        [
+          "pass rate",
+          "91% (was 94%)",
+          "A drop: something regressed."
+        ],
+        [
+          "avg cost",
+          "$0.031 / task",
+          ""
+        ],
+        [
+          "p95 latency",
+          "18s",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "dash",
+      "to": "agent",
+      "label": "gate",
+      "title": "Block regressions",
+      "text": "Run evals on every prompt or model change, like tests in CI. A 3-point drop means read the failing traces before shipping.",
+      "payload": [
+        [
+          "CI",
+          "fail if pass rate < 93%",
+          ""
+        ]
+      ]
+    }
+  ]
+}

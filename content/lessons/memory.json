@@ -1,0 +1,171 @@
+{
+  "id": "memory",
+  "path": "knowledge-protocols",
+  "order": 2,
+  "tier": "pro",
+  "category": "Knowledge",
+  "title": "How agents remember",
+  "summary": "Short-term memory is the context window. Long-term memory is a database the agent reads and writes.",
+  "nodes": [
+    {
+      "id": "user",
+      "label": "You",
+      "kind": "user",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "agent",
+      "label": "Agent",
+      "kind": "app",
+      "x": 38,
+      "y": 50
+    },
+    {
+      "id": "ctx",
+      "label": "Context window",
+      "kind": "data",
+      "x": 70,
+      "y": 18
+    },
+    {
+      "id": "model",
+      "label": "Model",
+      "kind": "model",
+      "x": 90,
+      "y": 55
+    },
+    {
+      "id": "mem",
+      "label": "Memory store",
+      "kind": "data",
+      "x": 62,
+      "y": 85
+    }
+  ],
+  "steps": [
+    {
+      "from": "user",
+      "to": "agent",
+      "label": "message",
+      "title": "Short-term memory = the conversation",
+      "text": "Everything said in this session sits in the context window and is re-sent on every call.",
+      "payload": [
+        [
+          "message",
+          "\"I'm vegetarian, plan my meals for the week.\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "ctx",
+      "label": "append",
+      "title": "The window fills up",
+      "text": "Context windows are large but finite, and longer prompts are slower and cost more.",
+      "payload": [
+        [
+          "used",
+          "182k / 200k tokens",
+          ""
+        ],
+        [
+          "risk",
+          "oldest turns get dropped",
+          "The agent 'forgets' the start of the chat."
+        ]
+      ]
+    },
+    {
+      "from": "ctx",
+      "to": "model",
+      "label": "summarise",
+      "title": "Compaction",
+      "text": "Before it overflows, the agent asks the model to summarise older turns and swaps the long history for the short summary.",
+      "payload": [
+        [
+          "before",
+          "182k tokens",
+          ""
+        ],
+        [
+          "after",
+          "14k tokens",
+          ""
+        ],
+        [
+          "kept",
+          "decisions, open tasks, user preferences",
+          "Summaries lose detail; choose what to keep."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "mem",
+      "label": "save fact",
+      "title": "Long-term memory: write it down",
+      "text": "Facts worth keeping across sessions are saved to a store (a file, a database or a vector index).",
+      "payload": [
+        [
+          "type",
+          "\"user_preference\"",
+          ""
+        ],
+        [
+          "fact",
+          "\"User is vegetarian\"",
+          ""
+        ],
+        [
+          "saved_at",
+          "2026-11-19",
+          "Dates help you spot stale memories."
+        ]
+      ]
+    },
+    {
+      "from": "user",
+      "to": "agent",
+      "label": "new session",
+      "title": "Days later: a fresh conversation",
+      "text": "The context window is empty again. Without long-term memory the agent would have to ask everything again.",
+      "payload": [
+        [
+          "message",
+          "\"Suggest a dinner recipe.\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "mem",
+      "to": "agent",
+      "label": "recall",
+      "title": "Recall relevant memories",
+      "text": "The agent searches memory for things related to the request and loads the matches into the prompt.",
+      "payload": [
+        [
+          "matches",
+          "[\"User is vegetarian\"]",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "model",
+      "label": "prompt + memories",
+      "title": "Personalised without asking again",
+      "text": "Memory is just more context. The skill is deciding what to save, what to recall and when to forget.",
+      "payload": [
+        [
+          "reply",
+          "\"How about a chickpea and spinach curry?\"",
+          ""
+        ]
+      ]
+    }
+  ]
+}

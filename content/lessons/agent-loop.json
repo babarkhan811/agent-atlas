@@ -1,0 +1,190 @@
+{
+  "id": "agent-loop",
+  "path": "foundations",
+  "order": 3,
+  "tier": "free",
+  "category": "Agents",
+  "title": "The agent loop",
+  "summary": "An agent is a model calling tools in a loop until the goal is done or a limit is hit.",
+  "nodes": [
+    {
+      "id": "user",
+      "label": "You",
+      "kind": "user",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "agent",
+      "label": "Agent runtime",
+      "kind": "app",
+      "x": 38,
+      "y": 50
+    },
+    {
+      "id": "model",
+      "label": "Model",
+      "kind": "model",
+      "x": 70,
+      "y": 18
+    },
+    {
+      "id": "issues",
+      "label": "Issue tracker",
+      "kind": "tool",
+      "x": 90,
+      "y": 55
+    },
+    {
+      "id": "files",
+      "label": "File system",
+      "kind": "data",
+      "x": 66,
+      "y": 85
+    }
+  ],
+  "steps": [
+    {
+      "from": "user",
+      "to": "agent",
+      "label": "goal",
+      "title": "You give a goal, not steps",
+      "text": "With a plain chatbot you drive. With an agent you state the outcome and the model works out the steps.",
+      "payload": [
+        [
+          "goal",
+          "\"Summarise this week's open bugs into report.md\"",
+          ""
+        ],
+        [
+          "max_iterations",
+          "15",
+          "A hard stop so a confused agent can't loop forever."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "model",
+      "label": "turn 1",
+      "title": "Turn 1: think, then act",
+      "text": "The runtime sends the goal and the tool list. The model reasons about what it needs first.",
+      "payload": [
+        [
+          "tools",
+          "list_issues, read_issue, write_file",
+          ""
+        ],
+        [
+          "context",
+          "≈ 1.2k tokens",
+          "Small now; it grows every turn."
+        ]
+      ]
+    },
+    {
+      "from": "model",
+      "to": "agent",
+      "label": "tool_use",
+      "title": "The model picks a tool",
+      "text": "It chooses list_issues with a filter. The runtime runs it.",
+      "payload": [
+        [
+          "call",
+          "list_issues({ state: \"open\", label: \"bug\", since: \"7d\" })",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "issues",
+      "label": "list_issues",
+      "title": "Observe",
+      "text": "The result is appended to the conversation. This think → act → observe cycle is often called ReAct.",
+      "payload": [
+        [
+          "result",
+          "12 issues · #481 login timeout · #477 CSV export blank · …",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "issues",
+      "to": "agent",
+      "label": "12 issues",
+      "title": "The loop continues",
+      "text": "The model sees the list, decides it needs detail on the three highest-priority bugs, and requests read_issue three times. Several independent calls can run in parallel.",
+      "payload": [
+        [
+          "turn",
+          "2 → 4",
+          ""
+        ],
+        [
+          "context",
+          "≈ 9.8k tokens",
+          "Every result makes the next call bigger and pricier."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "files",
+      "label": "write_file",
+      "title": "Produce the deliverable",
+      "text": "Once it has enough, the model asks to write the report. Writing is an action with side effects, so many runtimes ask for confirmation here.",
+      "payload": [
+        [
+          "path",
+          "\"report.md\"",
+          ""
+        ],
+        [
+          "content",
+          "\"## Open bugs (12)\\n1. Login timeout…\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "model",
+      "label": "turn 6",
+      "title": "Check if done",
+      "text": "After the write succeeds the model reviews the goal and replies with text instead of a tool call. That's the signal to stop.",
+      "payload": [
+        [
+          "stop_reason",
+          "\"end_turn\"",
+          "Text with no tool call ends the loop."
+        ],
+        [
+          "turns used",
+          "6 of 15",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "user",
+      "label": "done",
+      "title": "Report ready",
+      "text": "Real agents add retries, timeouts, cost budgets and logging around this same simple loop.",
+      "payload": [
+        [
+          "output",
+          "report.md (12 bugs, 3 detailed)",
+          ""
+        ],
+        [
+          "cost",
+          "≈ 41k tokens total",
+          "Loops get expensive; budgets matter."
+        ]
+      ]
+    }
+  ]
+}

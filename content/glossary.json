@@ -1,0 +1,152 @@
+[
+  {
+    "slug": "agent",
+    "term": "Agent",
+    "definition": "A model that calls tools in a loop to reach a goal, deciding its own steps."
+  },
+  {
+    "slug": "context-window",
+    "term": "Context window",
+    "definition": "Everything the model can see in one call: instructions, history, tool results."
+  },
+  {
+    "slug": "token",
+    "term": "Token",
+    "definition": "A chunk of text (roughly ¾ of a word). Models read, write and bill in tokens."
+  },
+  {
+    "slug": "tool-function-calling",
+    "term": "Tool / function calling",
+    "definition": "The model returns a structured request; your code runs it and sends back the result."
+  },
+  {
+    "slug": "system-prompt",
+    "term": "System prompt",
+    "definition": "Standing instructions that shape every reply."
+  },
+  {
+    "slug": "temperature",
+    "term": "Temperature",
+    "definition": "How random token choice is. Low = consistent, high = creative."
+  },
+  {
+    "slug": "embedding",
+    "term": "Embedding",
+    "definition": "A list of numbers representing meaning, used to find similar text."
+  },
+  {
+    "slug": "vector-database",
+    "term": "Vector database",
+    "definition": "A store that finds the embeddings closest to a query."
+  },
+  {
+    "slug": "rag",
+    "term": "RAG",
+    "definition": "Retrieve relevant documents, paste them into the prompt, then answer."
+  },
+  {
+    "slug": "mcp",
+    "term": "MCP",
+    "definition": "Model Context Protocol: an open standard for connecting AI apps to tool servers."
+  },
+  {
+    "slug": "orchestrator",
+    "term": "Orchestrator",
+    "definition": "The agent that plans a job and hands parts to sub-agents."
+  },
+  {
+    "slug": "structured-output",
+    "term": "Structured output",
+    "definition": "Forcing the model's reply to match a JSON schema."
+  },
+  {
+    "slug": "prompt-injection",
+    "term": "Prompt injection",
+    "definition": "Hostile instructions hidden in content the model reads."
+  },
+  {
+    "slug": "guardrail",
+    "term": "Guardrail",
+    "definition": "A check outside the model that blocks unsafe inputs or actions."
+  },
+  {
+    "slug": "human-in-the-loop",
+    "term": "Human-in-the-loop",
+    "definition": "A person approves risky actions before they run."
+  },
+  {
+    "slug": "eval",
+    "term": "Eval",
+    "definition": "A repeatable test that scores an AI system on real tasks."
+  },
+  {
+    "slug": "hallucination",
+    "term": "Hallucination",
+    "definition": "A confident answer that isn't supported by facts or sources."
+  },
+  {
+    "slug": "webhook",
+    "term": "Webhook",
+    "definition": "A URL another service calls when an event happens, used to trigger automations."
+  },
+  {
+    "slug": "soc",
+    "term": "SOC",
+    "definition": "Security Operations Centre: the team that watches for and responds to attacks."
+  },
+  {
+    "slug": "siem",
+    "term": "SIEM",
+    "definition": "A system that collects logs from everywhere and raises security alerts."
+  },
+  {
+    "slug": "soar",
+    "term": "SOAR",
+    "definition": "Security automation: playbooks that run response steps automatically."
+  },
+  {
+    "slug": "edr",
+    "term": "EDR",
+    "definition": "Endpoint Detection & Response: security software on laptops and servers."
+  },
+  {
+    "slug": "ioc",
+    "term": "IOC",
+    "definition": "Indicator of compromise: a known-bad domain, IP or file hash."
+  },
+  {
+    "slug": "cve",
+    "term": "CVE",
+    "definition": "A public ID for a known software vulnerability."
+  },
+  {
+    "slug": "mitre-attandck",
+    "term": "MITRE ATT&CK",
+    "definition": "A catalogue of attacker techniques used to describe what an attack did."
+  },
+  {
+    "slug": "playbook",
+    "term": "Playbook",
+    "definition": "A written set of response steps that automation can run the same way every time."
+  },
+  {
+    "slug": "infrastructure-as-code",
+    "term": "Infrastructure as code",
+    "definition": "Cloud setup written in files, so changes are reviewed and repeatable."
+  },
+  {
+    "slug": "beaconing",
+    "term": "Beaconing",
+    "definition": "Malware checking in with its controller at regular intervals."
+  },
+  {
+    "slug": "detection-rule",
+    "term": "Detection rule",
+    "definition": "A saved search that raises an alert whenever a pattern appears."
+  },
+  {
+    "slug": "least-privilege",
+    "term": "Least privilege",
+    "definition": "Give each person or agent only the access the task needs."
+  }
+]

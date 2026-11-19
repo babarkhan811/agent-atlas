@@ -1,0 +1,30 @@
+[
+  {
+    "id": "foundations",
+    "order": 1,
+    "title": "Foundations",
+    "tier": "free",
+    "description": "How an LLM call works, how models use tools, the agent loop, and how to defend it against prompt injection."
+  },
+  {
+    "id": "knowledge-protocols",
+    "order": 2,
+    "title": "Knowledge & Protocols",
+    "tier": "pro",
+    "description": "Give agents knowledge and connections: RAG, memory and the Model Context Protocol."
+  },
+  {
+    "id": "reliable-agents",
+    "order": 3,
+    "title": "Building Reliable Agents",
+    "tier": "pro",
+    "description": "Workflows vs agents, multi-agent teams, computer use, human approval and evals."
+  },
+  {
+    "id": "security",
+    "order": 4,
+    "title": "AI for Security Teams",
+    "tier": "pro",
+    "description": "Automate security operations with software agents and AI agents, safely."
+  }
+]

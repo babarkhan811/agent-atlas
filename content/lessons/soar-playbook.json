@@ -1,0 +1,168 @@
+{
+  "id": "soar-playbook",
+  "path": "security",
+  "order": 4,
+  "tier": "pro",
+  "category": "Cybersecurity automation",
+  "title": "Security playbooks on autopilot (SOAR)",
+  "summary": "Routine threats get handled end to end in seconds: safe steps run automatically, risky ones wait for a person.",
+  "nodes": [
+    {
+      "id": "edr",
+      "label": "EDR alert",
+      "kind": "external",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "soar",
+      "label": "SOAR engine",
+      "kind": "app",
+      "x": 38,
+      "y": 50
+    },
+    {
+      "id": "intel",
+      "label": "Hash reputation",
+      "kind": "tool",
+      "x": 68,
+      "y": 12
+    },
+    {
+      "id": "llm",
+      "label": "AI decision step",
+      "kind": "model",
+      "x": 90,
+      "y": 50
+    },
+    {
+      "id": "ticket",
+      "label": "Ticket + chat",
+      "kind": "data",
+      "x": 68,
+      "y": 88
+    }
+  ],
+  "steps": [
+    {
+      "from": "edr",
+      "to": "soar",
+      "label": "malware detected",
+      "title": "Trigger",
+      "text": "A playbook starts automatically for every alert of this type. Same steps every time, no matter if it's 3 a.m.",
+      "payload": [
+        [
+          "alert",
+          "\"Malicious file written to disk\"",
+          ""
+        ],
+        [
+          "file",
+          "invoice_scan.exe",
+          ""
+        ],
+        [
+          "sha256",
+          "9f2c…e81a",
+          "A fingerprint of the file."
+        ],
+        [
+          "host",
+          "HR-PC-07",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "soar",
+      "to": "intel",
+      "label": "lookup hash",
+      "title": "Enrich automatically",
+      "text": "Read-only lookups are always safe to automate.",
+      "payload": [
+        [
+          "verdict",
+          "malicious · 54/70 engines",
+          ""
+        ],
+        [
+          "family",
+          "info-stealer",
+          "Steals saved passwords and browser cookies."
+        ]
+      ]
+    },
+    {
+      "from": "soar",
+      "to": "llm",
+      "label": "decide",
+      "title": "AI handles the judgement call",
+      "text": "Fixed rules cover the clear cases. The AI step reads the full context and picks a path from a fixed list, so it can't invent new actions.",
+      "payload": [
+        [
+          "allowed paths",
+          "auto_contain · escalate · close_benign",
+          "The model chooses; it can't add options."
+        ],
+        [
+          "choice",
+          "auto_contain",
+          ""
+        ],
+        [
+          "why",
+          "\"Known stealer, file not yet executed, single host\"",
+          "Logged for the audit trail."
+        ]
+      ]
+    },
+    {
+      "from": "soar",
+      "to": "edr",
+      "label": "quarantine file",
+      "title": "Safe action: done automatically",
+      "text": "Quarantining one file is low-risk and easily undone, so it runs without waiting. Isolating a whole machine or a server would need approval.",
+      "payload": [
+        [
+          "action",
+          "quarantine invoice_scan.exe",
+          ""
+        ],
+        [
+          "also",
+          "block hash across all endpoints",
+          "One detection protects every machine."
+        ],
+        [
+          "undo",
+          "restore from quarantine",
+          "Reversible actions are the best candidates for automation."
+        ]
+      ]
+    },
+    {
+      "from": "soar",
+      "to": "ticket",
+      "label": "ticket + notify",
+      "title": "Close the loop",
+      "text": "A ticket records everything and the team is told what was done, so humans stay in charge without doing the busywork.",
+      "payload": [
+        [
+          "ticket",
+          "SEC-1932 · contained automatically",
+          ""
+        ],
+        [
+          "message",
+          "\"Info-stealer quarantined on HR-PC-07, no execution seen\"",
+          ""
+        ],
+        [
+          "time",
+          "38 seconds end to end",
+          "vs ~30 minutes by hand."
+        ]
+      ]
+    }
+  ]
+}

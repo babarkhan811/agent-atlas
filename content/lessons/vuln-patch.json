@@ -1,0 +1,143 @@
+{
+  "id": "vuln-patch",
+  "path": "security",
+  "order": 7,
+  "tier": "pro",
+  "category": "Cybersecurity automation",
+  "title": "Vulnerability fixing agent",
+  "summary": "From a new CVE to a tested pull request, with a developer reviewing before merge.",
+  "nodes": [
+    {
+      "id": "feed",
+      "label": "CVE feed",
+      "kind": "external",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "agent",
+      "label": "Security agent",
+      "kind": "app",
+      "x": 36,
+      "y": 50
+    },
+    {
+      "id": "repo",
+      "label": "Code repo",
+      "kind": "data",
+      "x": 66,
+      "y": 14
+    },
+    {
+      "id": "ci",
+      "label": "CI tests",
+      "kind": "guard",
+      "x": 90,
+      "y": 50
+    },
+    {
+      "id": "dev",
+      "label": "Developer",
+      "kind": "user",
+      "x": 66,
+      "y": 86
+    }
+  ],
+  "steps": [
+    {
+      "from": "feed",
+      "to": "agent",
+      "label": "new CVE",
+      "title": "A vulnerability is published",
+      "text": "",
+      "payload": [
+        [
+          "id",
+          "CVE-2026-XXXXX (example)",
+          ""
+        ],
+        [
+          "package",
+          "image-lib < 4.2.1",
+          ""
+        ],
+        [
+          "CVSS",
+          "8.8 high",
+          "0–10 severity score."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "repo",
+      "label": "scan",
+      "title": "Are we affected, and is it reachable?",
+      "text": "The dependency is checked, then the agent reads the code to see whether the vulnerable function is actually called. That separates urgent fixes from noise.",
+      "payload": [
+        [
+          "found in",
+          "services/upload (v4.1.0)",
+          ""
+        ],
+        [
+          "reachable",
+          "yes: user avatar upload",
+          "Exploitable from the internet, so it's top priority."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "repo",
+      "label": "branch + fix",
+      "title": "Write the fix",
+      "text": "Upgrade the package, adjust code for any breaking changes, and add a regression test.",
+      "payload": [
+        [
+          "change",
+          "image-lib 4.1.0 → 4.2.1",
+          ""
+        ],
+        [
+          "test",
+          "rejects malformed image header",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "repo",
+      "to": "ci",
+      "label": "run tests",
+      "title": "Prove nothing broke",
+      "text": "",
+      "payload": [
+        [
+          "result",
+          "412 passed · 0 failed",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "dev",
+      "label": "pull request",
+      "title": "A developer reviews and merges",
+      "text": "The agent never merges to production itself. Days of manual work become a 10-minute review.",
+      "payload": [
+        [
+          "PR",
+          "\"Fix CVE-2026-XXXXX in image-lib (reachable via avatar upload)\"",
+          ""
+        ],
+        [
+          "includes",
+          "impact explanation · test · rollback note",
+          ""
+        ]
+      ]
+    }
+  ]
+}

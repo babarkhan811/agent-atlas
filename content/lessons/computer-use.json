@@ -1,0 +1,135 @@
+{
+  "id": "computer-use",
+  "path": "reliable-agents",
+  "order": 3,
+  "tier": "pro",
+  "category": "Agents",
+  "title": "Computer-use and browser agents",
+  "summary": "When there's no API, an agent can look at the screen and click like a person.",
+  "nodes": [
+    {
+      "id": "user",
+      "label": "You",
+      "kind": "user",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "agent",
+      "label": "Agent runtime",
+      "kind": "app",
+      "x": 38,
+      "y": 50
+    },
+    {
+      "id": "model",
+      "label": "Vision model",
+      "kind": "model",
+      "x": 70,
+      "y": 18
+    },
+    {
+      "id": "browser",
+      "label": "Browser (sandbox)",
+      "kind": "tool",
+      "x": 70,
+      "y": 82
+    }
+  ],
+  "steps": [
+    {
+      "from": "user",
+      "to": "agent",
+      "label": "goal",
+      "title": "A task on a site with no API",
+      "text": "",
+      "payload": [
+        [
+          "goal",
+          "\"Download last month's invoice from the supplier portal\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "browser",
+      "to": "agent",
+      "label": "screenshot",
+      "title": "Look",
+      "text": "The runtime takes a screenshot. That image is the model's only view of the screen.",
+      "payload": [
+        [
+          "image",
+          "1280×800 PNG",
+          "Images cost tokens too; smaller screens are cheaper."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "model",
+      "label": "screenshot + goal",
+      "title": "Decide",
+      "text": "The model finds the right element visually and returns an action with pixel coordinates.",
+      "payload": [
+        [
+          "action",
+          "\"left_click\"",
+          ""
+        ],
+        [
+          "coordinate",
+          "[1104, 86]",
+          "Where 'Billing' appears in the screenshot."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "browser",
+      "label": "click",
+      "title": "Act",
+      "text": "The runtime performs the click, waits for the page, and takes a new screenshot. Repeat.",
+      "payload": [
+        [
+          "next",
+          "screenshot → decide → act",
+          "Like the agent loop, but with eyes."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "browser",
+      "label": "type",
+      "title": "Fill in forms",
+      "text": "Typing, scrolling and key presses are all actions. Passwords should come from a vault the runtime fills in, never from the model.",
+      "payload": [
+        [
+          "action",
+          "\"type\"",
+          ""
+        ],
+        [
+          "text",
+          "\"October 2026\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "user",
+      "label": "invoice.pdf",
+      "title": "Done, slowly",
+      "text": "Computer use is flexible but slow and fragile compared to an API. Run it in a sandbox, and treat everything on screen as untrusted.",
+      "payload": [
+        [
+          "steps",
+          "11 screenshots · ~90 seconds",
+          ""
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,203 @@
+{
+  "id": "tool-use",
+  "path": "foundations",
+  "order": 2,
+  "tier": "free",
+  "category": "Foundations",
+  "title": "Tool use (function calling)",
+  "summary": "The model can't browse or run code. It asks your app to, and your app reports back.",
+  "nodes": [
+    {
+      "id": "user",
+      "label": "You",
+      "kind": "user",
+      "x": 9,
+      "y": 25
+    },
+    {
+      "id": "app",
+      "label": "Your app",
+      "kind": "app",
+      "x": 40,
+      "y": 50
+    },
+    {
+      "id": "model",
+      "label": "Model",
+      "kind": "model",
+      "x": 85,
+      "y": 25
+    },
+    {
+      "id": "tool",
+      "label": "Weather API",
+      "kind": "tool",
+      "x": 85,
+      "y": 78
+    }
+  ],
+  "steps": [
+    {
+      "from": "user",
+      "to": "app",
+      "label": "question",
+      "title": "A question the model can't answer alone",
+      "text": "Live weather isn't in the model's training data. It needs a tool.",
+      "payload": [
+        [
+          "text",
+          "\"Do I need an umbrella in Lahore today?\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "app",
+      "to": "model",
+      "label": "messages + tools",
+      "title": "The app describes its tools",
+      "text": "Each tool is a name, a description and a JSON Schema for its inputs. The description is what the model reads to decide when to use it, so it matters a lot.",
+      "payload": [
+        [
+          "tools[0].name",
+          "\"get_weather\"",
+          ""
+        ],
+        [
+          "tools[0].description",
+          "\"Current weather for a city.\"",
+          "Write this like docs for a new teammate."
+        ],
+        [
+          "tools[0].input_schema",
+          "{ city: string }",
+          "The model must fill this in."
+        ],
+        [
+          "messages",
+          "[{ role: \"user\", content: \"Do I need…\" }]",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "model",
+      "to": "app",
+      "label": "tool_use",
+      "title": "The model asks for a tool call",
+      "text": "Instead of text, the model returns a structured request and stops. It hasn't called anything; it's waiting for you.",
+      "payload": [
+        [
+          "stop_reason",
+          "\"tool_use\"",
+          "Means: run the tool, then call me again."
+        ],
+        [
+          "content[0].type",
+          "\"tool_use\"",
+          ""
+        ],
+        [
+          "content[0].id",
+          "\"toolu_01A…\"",
+          "You'll echo this back with the result."
+        ],
+        [
+          "content[0].input",
+          "{ city: \"Lahore\" }",
+          "Arguments the model chose."
+        ]
+      ]
+    },
+    {
+      "from": "app",
+      "to": "tool",
+      "label": "GET /weather",
+      "title": "Your code runs the tool",
+      "text": "This is the safety boundary: your code decides whether to run it, validates the input, and holds any API keys. The model never sees your secrets.",
+      "payload": [
+        [
+          "request",
+          "GET /weather?city=Lahore",
+          "An ordinary API call from your server."
+        ]
+      ]
+    },
+    {
+      "from": "tool",
+      "to": "app",
+      "label": "200 OK",
+      "title": "The tool responds",
+      "text": "Plain data, nothing AI about it.",
+      "payload": [
+        [
+          "body",
+          "{ temp_c: 31, rain_chance: 0.05, sky: \"clear\" }",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "app",
+      "to": "model",
+      "label": "tool_result",
+      "title": "The result goes back into the conversation",
+      "text": "The app sends the whole history again, plus a tool_result linked to the original request ID.",
+      "payload": [
+        [
+          "role",
+          "\"user\"",
+          "Tool results travel in a user turn."
+        ],
+        [
+          "content[0].type",
+          "\"tool_result\"",
+          ""
+        ],
+        [
+          "content[0].tool_use_id",
+          "\"toolu_01A…\"",
+          "Matches the request."
+        ],
+        [
+          "content[0].content",
+          "\"31°C, 5% rain, clear\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "model",
+      "to": "app",
+      "label": "end_turn",
+      "title": "The model writes the final answer",
+      "text": "Now grounded in real data. It could also ask for another tool; that repeat is what turns tool use into an agent.",
+      "payload": [
+        [
+          "stop_reason",
+          "\"end_turn\"",
+          ""
+        ],
+        [
+          "text",
+          "\"No umbrella needed: 31°C and only a 5% chance of rain.\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "app",
+      "to": "user",
+      "label": "answer",
+      "title": "Answer delivered",
+      "text": "Two model calls and one tool call, all invisible to the user.",
+      "payload": [
+        [
+          "round trips",
+          "2 model calls · 1 tool call",
+          ""
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,219 @@
+{
+  "id": "mcp",
+  "path": "knowledge-protocols",
+  "order": 3,
+  "tier": "pro",
+  "category": "Protocols",
+  "title": "MCP: Model Context Protocol",
+  "summary": "One standard plug so any AI app can use any tool server: GitHub, Slack, databases, your own APIs.",
+  "nodes": [
+    {
+      "id": "host",
+      "label": "AI app (host)",
+      "kind": "app",
+      "x": 10,
+      "y": 50
+    },
+    {
+      "id": "client",
+      "label": "MCP client",
+      "kind": "app",
+      "x": 36,
+      "y": 50
+    },
+    {
+      "id": "server",
+      "label": "MCP server",
+      "kind": "tool",
+      "x": 64,
+      "y": 50
+    },
+    {
+      "id": "gh",
+      "label": "GitHub API",
+      "kind": "external",
+      "x": 90,
+      "y": 50
+    },
+    {
+      "id": "model",
+      "label": "Model",
+      "kind": "model",
+      "x": 23,
+      "y": 12
+    }
+  ],
+  "steps": [
+    {
+      "from": "client",
+      "to": "server",
+      "label": "initialize",
+      "title": "Handshake",
+      "text": "MCP messages are JSON-RPC 2.0. Locally the server is a child process talking over stdin/stdout; remote servers use HTTP.",
+      "payload": [
+        [
+          "jsonrpc",
+          "\"2.0\"",
+          ""
+        ],
+        [
+          "id",
+          "1",
+          "Matches a response to its request."
+        ],
+        [
+          "method",
+          "\"initialize\"",
+          ""
+        ],
+        [
+          "params.protocolVersion",
+          "\"2025-06-18\"",
+          "Both sides agree on a version."
+        ],
+        [
+          "params.clientInfo",
+          "{ name: \"my-ai-app\", version: \"1.0\" }",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "server",
+      "to": "client",
+      "label": "capabilities",
+      "title": "The server says what it offers",
+      "text": "Servers can expose tools (actions), resources (readable data) and prompts (templates).",
+      "payload": [
+        [
+          "result.capabilities",
+          "{ tools: {}, resources: {} }",
+          ""
+        ],
+        [
+          "result.serverInfo",
+          "{ name: \"github\" }",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "client",
+      "to": "server",
+      "label": "tools/list",
+      "title": "Discover tools",
+      "text": "",
+      "payload": [
+        [
+          "method",
+          "\"tools/list\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "server",
+      "to": "client",
+      "label": "tool list",
+      "title": "Tools with schemas",
+      "text": "The same shape as function calling: name, description, input schema. That's why MCP tools drop straight into any model.",
+      "payload": [
+        [
+          "tools[0].name",
+          "\"create_issue\"",
+          ""
+        ],
+        [
+          "tools[0].inputSchema",
+          "{ repo, title, body }",
+          ""
+        ],
+        [
+          "tools[1].name",
+          "\"search_code\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "host",
+      "to": "model",
+      "label": "prompt + tools",
+      "title": "The host gives the tools to the model",
+      "text": "The model doesn't know MCP exists. It just sees tools.",
+      "payload": [
+        [
+          "user",
+          "\"File a bug: dark mode button does nothing\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "model",
+      "to": "host",
+      "label": "tool_use",
+      "title": "The model picks an MCP tool",
+      "text": "",
+      "payload": [
+        [
+          "input",
+          "{ repo: \"acme/web\", title: \"Dark mode toggle broken\" }",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "client",
+      "to": "server",
+      "label": "tools/call",
+      "title": "Call the tool",
+      "text": "The host usually asks you to approve the first call to each server.",
+      "payload": [
+        [
+          "method",
+          "\"tools/call\"",
+          ""
+        ],
+        [
+          "params.name",
+          "\"create_issue\"",
+          ""
+        ],
+        [
+          "params.arguments",
+          "{ repo: \"acme/web\", title: \"Dark mode…\" }",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "server",
+      "to": "gh",
+      "label": "POST /issues",
+      "title": "The server does the real work",
+      "text": "The server holds the GitHub token, not the model or the host.",
+      "payload": [
+        [
+          "request",
+          "POST /repos/acme/web/issues",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "server",
+      "to": "client",
+      "label": "result",
+      "title": "Result returns as content",
+      "text": "Write a server once and it works in every MCP-compatible app.",
+      "payload": [
+        [
+          "result.content",
+          "[{ type: \"text\", text: \"Created issue #212\" }]",
+          ""
+        ]
+      ]
+    }
+  ]
+}

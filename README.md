@@ -1,17 +1,40 @@
 # Agent Atlas
 
-Interactive, step-by-step lessons on how AI agents work: LLM calls, tool use, the agent loop, RAG, memory, MCP, multi-agent teams, computer use, workflow automation, cybersecurity automation (SOC triage, SOAR playbooks, phishing analysis, vulnerability fixing, cloud misconfiguration fixes, access reviews, threat hunting, incident response), safety guardrails and evals.
+Interactive, protocol-level simulations of how AI agents work: LLM calls, tool use, the agent loop, RAG, memory, MCP, multi-agent systems, automation, safety, evals, and a premium path on AI for security teams.
 
-There is also a build guide (`#/guide`) on automating cybersecurity with software agents and AI: automation ladder, architecture, step-by-step plan, tools, example code, safeguards and metrics.
+**Live:** https://babarkhan811.github.io/agent-atlas/
 
-Each lesson is an animated simulation: 3D-style components, glowing messages moving between them, a network view and a sequence view, a live message trace, and a decoded-message inspector. Keyboard: ← → to step, Space to play, Ctrl K to search.
+## Develop
 
-**Live site:** https://babarkhan811.github.io/agent-atlas/
+Requires Node 24.
 
-## Run locally
+```bash
+npm ci
+npm run dev          # http://localhost:3000
+npm run typecheck
+npm test             # unit tests (Vitest)
+npm run build        # static export to ./out
+npm run test:e2e     # Playwright against ./out (PW_CHANNEL=msedge to use an installed Edge)
+```
 
-It's plain HTML, CSS and JavaScript with no build step. Open `index.html` in a browser.
+## Layout
+
+| Path | What |
+|---|---|
+| `content/lessons/*.json` | One file per lesson, validated by `src/content/schema.ts` |
+| `content/paths.json`, `content/glossary.json` | Learning paths and glossary |
+| `src/sim/` | Simulation engine: isometric projection, icon kit, layout, `<Diagram />`, `<Sequence />` |
+| `src/components/` | App shell, workspace (playback, inspector, trace) |
+| `src/app/` | Routes: `/learn/[path]/[lesson]`, `/guide`, `/glossary` |
+| `tests/unit`, `tests/e2e` | Vitest and Playwright suites |
+| `docs/` | `PLAN.md`, `DECISIONS.md`, `SOURCES.md` |
+
+URLs: `/learn/<path>/<lesson>/?step=N&view=sequence`. Old `/#/<lesson>/<step>` links redirect.
 
 ## Add a lesson
 
-Add an object to `lessons.js` with `nodes` (positions in %) and `steps` (`from`, `to`, `label`, `title`, `text`, `payload`).
+Create `content/lessons/<id>.json` with `nodes` (positions in %) and `steps` (`from`, `to`, `label`, `title`, `text`, `payload` rows of `[field, value, note]`). `npm test` validates it.
+
+## Environment
+
+No secrets are needed yet. From M5 (auth and payments) see `.env.example`; never commit real keys.

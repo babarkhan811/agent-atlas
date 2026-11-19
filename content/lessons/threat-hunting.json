@@ -1,0 +1,152 @@
+{
+  "id": "threat-hunting",
+  "path": "security",
+  "order": 5,
+  "tier": "pro",
+  "category": "Cybersecurity automation",
+  "title": "Threat hunting with AI",
+  "summary": "Ask a question in plain English; the agent writes the log queries, spots the pattern and turns it into a permanent detection.",
+  "nodes": [
+    {
+      "id": "analyst",
+      "label": "Analyst",
+      "kind": "user",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "agent",
+      "label": "Hunting agent",
+      "kind": "app",
+      "x": 38,
+      "y": 50
+    },
+    {
+      "id": "model",
+      "label": "Model",
+      "kind": "model",
+      "x": 68,
+      "y": 12
+    },
+    {
+      "id": "logs",
+      "label": "Network logs",
+      "kind": "data",
+      "x": 90,
+      "y": 50
+    },
+    {
+      "id": "rules",
+      "label": "Detection rules",
+      "kind": "guard",
+      "x": 68,
+      "y": 88
+    }
+  ],
+  "steps": [
+    {
+      "from": "analyst",
+      "to": "agent",
+      "label": "hypothesis",
+      "title": "Start from a hunch",
+      "text": "Hunting means looking for attackers that no alert has caught yet.",
+      "payload": [
+        [
+          "question",
+          "\"Is any machine quietly phoning home on a regular timer?\"",
+          "Malware often checks in with its controller at fixed intervals (beaconing)."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "model",
+      "label": "write query",
+      "title": "Plain English → log query",
+      "text": "The model writes the query in the log tool's language. The agent only has read access to logs, so a bad query can't break anything.",
+      "payload": [
+        [
+          "query",
+          "connections | group by host, dest | where interval_stddev < 2s and count > 500",
+          "Very regular timing is suspicious; humans and browsers are irregular."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "logs",
+      "label": "run (read-only)",
+      "title": "Search 7 days of traffic",
+      "text": "",
+      "payload": [
+        [
+          "scanned",
+          "2.1 billion connections",
+          ""
+        ],
+        [
+          "matches",
+          "9 host/destination pairs",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "logs",
+      "to": "agent",
+      "label": "9 matches",
+      "title": "Separate signal from noise",
+      "text": "The agent checks each match: 8 are known update services and monitoring tools. One isn't.",
+      "payload": [
+        [
+          "suspicious",
+          "DEV-SRV-03 → 198.51.100.23 every 60s",
+          ""
+        ],
+        [
+          "domain age",
+          "9 days",
+          ""
+        ],
+        [
+          "benign",
+          "8 (update checks, monitoring)",
+          "Added to an allowlist so they don't show up again."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "analyst",
+      "label": "finding",
+      "title": "Hand over to incident response",
+      "text": "The analyst confirms and opens an incident; from here the incident response lesson takes over.",
+      "payload": [
+        [
+          "evidence",
+          "timing chart · process name · first seen",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "rules",
+      "label": "new detection",
+      "title": "Make it permanent",
+      "text": "A one-off hunt becomes an always-on rule. The agent tests it on 30 days of past data first to check it won't flood the team with false alarms.",
+      "payload": [
+        [
+          "rule",
+          "\"Regular beaconing to new domain\"",
+          ""
+        ],
+        [
+          "backtest",
+          "1 true hit · 2 false alarms / month",
+          "Acceptable noise level."
+        ]
+      ]
+    }
+  ]
+}

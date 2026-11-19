@@ -1,0 +1,138 @@
+{
+  "id": "human-in-loop",
+  "path": "reliable-agents",
+  "order": 4,
+  "tier": "pro",
+  "category": "Safety",
+  "title": "Human-in-the-loop approvals",
+  "summary": "Let the agent do the work, but make a person sign off on risky actions.",
+  "nodes": [
+    {
+      "id": "agent",
+      "label": "Support agent",
+      "kind": "app",
+      "x": 10,
+      "y": 50
+    },
+    {
+      "id": "policy",
+      "label": "Policy check",
+      "kind": "guard",
+      "x": 38,
+      "y": 50
+    },
+    {
+      "id": "human",
+      "label": "Manager",
+      "kind": "user",
+      "x": 64,
+      "y": 14
+    },
+    {
+      "id": "pay",
+      "label": "Payments",
+      "kind": "tool",
+      "x": 90,
+      "y": 50
+    },
+    {
+      "id": "log",
+      "label": "Audit log",
+      "kind": "data",
+      "x": 64,
+      "y": 86
+    }
+  ],
+  "steps": [
+    {
+      "from": "agent",
+      "to": "policy",
+      "label": "refund $450",
+      "title": "The agent wants to act",
+      "text": "Every side-effecting tool call passes through a check before it runs.",
+      "payload": [
+        [
+          "tool",
+          "issue_refund",
+          ""
+        ],
+        [
+          "amount",
+          "$450",
+          ""
+        ],
+        [
+          "reason",
+          "\"Order arrived damaged, photo attached\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "policy",
+      "to": "human",
+      "label": "needs approval",
+      "title": "Rules decide, not the model",
+      "text": "The threshold lives in plain code the model can't talk its way around.",
+      "payload": [
+        [
+          "rule",
+          "refunds > $100 need approval",
+          ""
+        ],
+        [
+          "summary",
+          "order, photo, customer history, agent's reasoning",
+          "Give the reviewer everything in one view."
+        ]
+      ]
+    },
+    {
+      "from": "human",
+      "to": "policy",
+      "label": "approve",
+      "title": "A person decides",
+      "text": "",
+      "payload": [
+        [
+          "decision",
+          "approved",
+          ""
+        ],
+        [
+          "by",
+          "manager@shop",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "policy",
+      "to": "pay",
+      "label": "execute",
+      "title": "Only now does it run",
+      "text": "",
+      "payload": [
+        [
+          "result",
+          "refund re_93k… succeeded",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "policy",
+      "to": "log",
+      "label": "record",
+      "title": "Everything is logged",
+      "text": "Keep who asked, what the agent saw, who approved and what happened. As approvals prove routine, you can raise the threshold.",
+      "payload": [
+        [
+          "entry",
+          "{ tool, input, approver, result, timestamp }",
+          ""
+        ]
+      ]
+    }
+  ]
+}

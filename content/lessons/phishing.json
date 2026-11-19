@@ -1,0 +1,143 @@
+{
+  "id": "phishing",
+  "path": "security",
+  "order": 3,
+  "tier": "pro",
+  "category": "Cybersecurity automation",
+  "title": "Automated phishing analysis",
+  "summary": "Employees report suspicious emails; an AI pipeline checks every one in seconds.",
+  "nodes": [
+    {
+      "id": "user",
+      "label": "Employee",
+      "kind": "user",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "pipe",
+      "label": "Phishing pipeline",
+      "kind": "app",
+      "x": 38,
+      "y": 50
+    },
+    {
+      "id": "sandbox",
+      "label": "URL sandbox",
+      "kind": "tool",
+      "x": 70,
+      "y": 14
+    },
+    {
+      "id": "llm",
+      "label": "LLM analyst",
+      "kind": "model",
+      "x": 90,
+      "y": 50
+    },
+    {
+      "id": "mail",
+      "label": "Mail server",
+      "kind": "external",
+      "x": 70,
+      "y": 86
+    }
+  ],
+  "steps": [
+    {
+      "from": "user",
+      "to": "pipe",
+      "label": "report",
+      "title": "Someone clicks \"Report phishing\"",
+      "text": "",
+      "payload": [
+        [
+          "subject",
+          "\"Urgent: your mailbox will be suspended\"",
+          ""
+        ],
+        [
+          "from",
+          "\"IT Support\" <it-support@micr0soft-help.example>",
+          "Display name looks right; the domain doesn't."
+        ]
+      ]
+    },
+    {
+      "from": "pipe",
+      "to": "sandbox",
+      "label": "detonate links",
+      "title": "Check headers and links safely",
+      "text": "Code checks email authentication results, and links are opened in an isolated sandbox browser, never on a real machine.",
+      "payload": [
+        [
+          "SPF / DKIM / DMARC",
+          "fail / none / fail",
+          "The sender isn't who they claim."
+        ],
+        [
+          "link",
+          "lands on a fake login page",
+          ""
+        ],
+        [
+          "screenshot",
+          "copy of the company sign-in page",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "pipe",
+      "to": "llm",
+      "label": "email + evidence",
+      "title": "The LLM reads it like an analyst would",
+      "text": "Models are good at spotting manipulation: urgency, threats, mismatched branding. The email body is treated as untrusted data.",
+      "payload": [
+        [
+          "signals",
+          "urgency · credential request · lookalike domain",
+          ""
+        ],
+        [
+          "verdict",
+          "phishing · credential harvesting",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "pipe",
+      "to": "mail",
+      "label": "purge copies",
+      "title": "Remove it from every inbox",
+      "text": "The same email usually went to many people. The pipeline finds and pulls every copy and blocks the sender domain.",
+      "payload": [
+        [
+          "found",
+          "37 inboxes",
+          ""
+        ],
+        [
+          "clicked",
+          "2 users",
+          "Their passwords are reset and sessions revoked."
+        ]
+      ]
+    },
+    {
+      "from": "pipe",
+      "to": "user",
+      "label": "thank you",
+      "title": "Close the loop",
+      "text": "Telling the reporter what happened encourages more people to report.",
+      "payload": [
+        [
+          "message",
+          "\"Confirmed phishing, removed from 37 inboxes. Thanks!\"",
+          ""
+        ]
+      ]
+    }
+  ]
+}

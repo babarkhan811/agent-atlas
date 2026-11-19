@@ -1,0 +1,153 @@
+{
+  "id": "cloud-remediation",
+  "path": "security",
+  "order": 8,
+  "tier": "pro",
+  "category": "Cybersecurity automation",
+  "title": "Auto-fixing cloud misconfigurations",
+  "summary": "Most cloud breaches start with a setting left open. An agent finds them and fixes them the safe way: in code.",
+  "nodes": [
+    {
+      "id": "scan",
+      "label": "Cloud scanner",
+      "kind": "tool",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "agent",
+      "label": "Remediation agent",
+      "kind": "app",
+      "x": 38,
+      "y": 50
+    },
+    {
+      "id": "cloud",
+      "label": "Cloud account",
+      "kind": "external",
+      "x": 68,
+      "y": 12
+    },
+    {
+      "id": "repo",
+      "label": "Infra code repo",
+      "kind": "data",
+      "x": 90,
+      "y": 50
+    },
+    {
+      "id": "owner",
+      "label": "Resource owner",
+      "kind": "user",
+      "x": 68,
+      "y": 88
+    }
+  ],
+  "steps": [
+    {
+      "from": "scan",
+      "to": "agent",
+      "label": "finding",
+      "title": "The scanner flags a risky setting",
+      "text": "Security posture tools check every cloud resource against best-practice rules, continuously.",
+      "payload": [
+        [
+          "resource",
+          "storage bucket \"customer-exports\"",
+          ""
+        ],
+        [
+          "issue",
+          "publicly readable",
+          "Anyone with the link can download the files."
+        ],
+        [
+          "severity",
+          "critical",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "cloud",
+      "label": "inspect",
+      "title": "Check context before acting",
+      "text": "Not every public bucket is a mistake; website assets are meant to be public. The agent checks tags, contents and recent access first.",
+      "payload": [
+        [
+          "tags",
+          "{ team: \"data\", env: \"prod\" }",
+          ""
+        ],
+        [
+          "contents",
+          "CSV files named orders_*.csv",
+          "Looks like customer data, not website files."
+        ],
+        [
+          "public reads",
+          "0 in the last 30 days",
+          "Probably not exposed yet."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "repo",
+      "label": "pull request",
+      "title": "Fix it in code, not by clicking",
+      "text": "If you fix the live setting only, the next deploy puts the old one back. The agent changes the infrastructure-as-code file so the fix sticks.",
+      "payload": [
+        [
+          "file",
+          "infra/storage.tf",
+          ""
+        ],
+        [
+          "change",
+          "public_access = false",
+          ""
+        ],
+        [
+          "policy",
+          "non-prod: auto-merge · prod: owner approval",
+          "Riskier environments get a human."
+        ]
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "owner",
+      "label": "please approve",
+      "title": "Ask the right person",
+      "text": "The owner tag tells the agent exactly who to ask, so it doesn't go to a busy central security queue.",
+      "payload": [
+        [
+          "message",
+          "\"customer-exports is public and holds order data. Approve the PR to close it?\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "repo",
+      "to": "cloud",
+      "label": "deploy",
+      "title": "Merged, deployed, verified",
+      "text": "After deployment the scanner checks again to confirm the finding is really gone.",
+      "payload": [
+        [
+          "status",
+          "resolved · re-scan clean",
+          ""
+        ],
+        [
+          "time open",
+          "47 minutes",
+          "Industry average is often weeks."
+        ]
+      ]
+    }
+  ]
+}

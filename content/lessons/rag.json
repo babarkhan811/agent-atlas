@@ -1,0 +1,207 @@
+{
+  "id": "rag",
+  "path": "knowledge-protocols",
+  "order": 1,
+  "tier": "pro",
+  "category": "Knowledge",
+  "title": "RAG: retrieval-augmented generation",
+  "summary": "Give a model your private documents by searching them first and pasting the best bits into the prompt.",
+  "nodes": [
+    {
+      "id": "docs",
+      "label": "Your docs",
+      "kind": "data",
+      "x": 9,
+      "y": 20
+    },
+    {
+      "id": "embed",
+      "label": "Embedding model",
+      "kind": "model",
+      "x": 38,
+      "y": 20
+    },
+    {
+      "id": "vdb",
+      "label": "Vector database",
+      "kind": "data",
+      "x": 70,
+      "y": 20
+    },
+    {
+      "id": "user",
+      "label": "You",
+      "kind": "user",
+      "x": 9,
+      "y": 80
+    },
+    {
+      "id": "app",
+      "label": "Your app",
+      "kind": "app",
+      "x": 38,
+      "y": 80
+    },
+    {
+      "id": "model",
+      "label": "LLM",
+      "kind": "model",
+      "x": 70,
+      "y": 80
+    }
+  ],
+  "steps": [
+    {
+      "from": "docs",
+      "to": "embed",
+      "label": "chunks",
+      "title": "Indexing: split documents into chunks",
+      "text": "Done once, ahead of time. Long documents are cut into passages of a few hundred tokens, usually with some overlap so ideas aren't cut in half.",
+      "payload": [
+        [
+          "source",
+          "hr-handbook.pdf (48 pages)",
+          ""
+        ],
+        [
+          "chunk_size",
+          "400 tokens · overlap 50",
+          "Too big = noisy matches, too small = lost context."
+        ],
+        [
+          "chunks",
+          "212",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "embed",
+      "to": "vdb",
+      "label": "vectors",
+      "title": "Each chunk becomes a vector",
+      "text": "An embedding is a list of numbers that captures meaning. Passages about similar things end up close together, even with different words.",
+      "payload": [
+        [
+          "vector",
+          "[0.012, -0.341, 0.088, … ]",
+          ""
+        ],
+        [
+          "dimensions",
+          "1024",
+          ""
+        ],
+        [
+          "metadata",
+          "{ file: \"hr-handbook.pdf\", page: 14 }",
+          "Kept so you can cite sources later."
+        ]
+      ]
+    },
+    {
+      "from": "user",
+      "to": "app",
+      "label": "question",
+      "title": "Query time: a question arrives",
+      "text": "",
+      "payload": [
+        [
+          "text",
+          "\"How many days of parental leave do I get?\"",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "app",
+      "to": "embed",
+      "label": "embed query",
+      "title": "Embed the question with the same model",
+      "text": "Question and documents must live in the same vector space, so the same embedding model is used.",
+      "payload": [
+        [
+          "query_vector",
+          "[0.020, -0.297, 0.101, …]",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "embed",
+      "to": "vdb",
+      "label": "nearest neighbours",
+      "title": "Search for the closest chunks",
+      "text": "The database finds the vectors nearest the question (cosine similarity). Many systems also run a keyword search and merge the two (hybrid search).",
+      "payload": [
+        [
+          "top_k",
+          "4",
+          ""
+        ],
+        [
+          "metric",
+          "cosine",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "vdb",
+      "to": "app",
+      "label": "top 4 chunks",
+      "title": "Best passages come back",
+      "text": "",
+      "payload": [
+        [
+          "#1",
+          "p.14 \"Parental leave: 16 weeks paid…\" · 0.89",
+          "Score = similarity."
+        ],
+        [
+          "#2",
+          "p.15 \"Leave can be split into…\" · 0.81",
+          ""
+        ],
+        [
+          "#3",
+          "p.3 \"Annual leave: 20 days…\" · 0.62",
+          "Related but not what was asked."
+        ]
+      ]
+    },
+    {
+      "from": "app",
+      "to": "model",
+      "label": "prompt + context",
+      "title": "Stuff the context into the prompt",
+      "text": "The retrieved text is pasted in with an instruction to answer only from it. The model hasn't been retrained; it's reading.",
+      "payload": [
+        [
+          "system",
+          "\"Answer only from <context>. Cite pages. Say if unsure.\"",
+          "Reduces made-up answers."
+        ],
+        [
+          "context",
+          "<context>p.14 … p.15 … p.3 …</context>",
+          ""
+        ]
+      ]
+    },
+    {
+      "from": "model",
+      "to": "app",
+      "label": "grounded answer",
+      "title": "An answer with citations",
+      "text": "Answers can now cite the handbook. If retrieval misses the right chunk, the answer will be wrong, so RAG quality mostly depends on search quality.",
+      "payload": [
+        [
+          "text",
+          "\"16 weeks paid, which can be split into two blocks (p.14–15).\"",
+          ""
+        ]
+      ]
+    }
+  ]
+}

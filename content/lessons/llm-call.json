@@ -1,0 +1,175 @@
+{
+  "id": "llm-call",
+  "path": "foundations",
+  "order": 1,
+  "tier": "free",
+  "category": "Foundations",
+  "title": "What happens when you prompt an LLM",
+  "summary": "Follow one question from your keyboard to the model and back, token by token.",
+  "nodes": [
+    {
+      "id": "user",
+      "label": "You",
+      "kind": "user",
+      "x": 9,
+      "y": 50
+    },
+    {
+      "id": "app",
+      "label": "Chat app",
+      "kind": "app",
+      "x": 35,
+      "y": 50
+    },
+    {
+      "id": "api",
+      "label": "LLM API",
+      "kind": "external",
+      "x": 63,
+      "y": 50
+    },
+    {
+      "id": "model",
+      "label": "Model",
+      "kind": "model",
+      "x": 90,
+      "y": 50
+    }
+  ],
+  "steps": [
+    {
+      "from": "user",
+      "to": "app",
+      "label": "prompt",
+      "title": "You type a question",
+      "text": "Nothing smart has happened yet. The app just holds your text and the conversation so far.",
+      "payload": [
+        [
+          "text",
+          "\"Explain webhooks in one sentence\"",
+          "Your raw message."
+        ]
+      ]
+    },
+    {
+      "from": "app",
+      "to": "api",
+      "label": "POST /v1/messages",
+      "title": "The app sends an HTTPS request",
+      "text": "Chat apps are thin clients. Every turn, they send the whole conversation again, because the model itself keeps no memory between calls.",
+      "payload": [
+        [
+          "model",
+          "\"llm-large\"",
+          "Which model to run."
+        ],
+        [
+          "max_tokens",
+          "512",
+          "Hard cap on how long the answer can be."
+        ],
+        [
+          "system",
+          "\"You are a concise tutor.\"",
+          "Instructions that shape every reply."
+        ],
+        [
+          "messages",
+          "[{ role: \"user\", content: \"Explain webhooks…\" }]",
+          "The full chat history, oldest first."
+        ]
+      ]
+    },
+    {
+      "from": "api",
+      "to": "model",
+      "label": "tokens",
+      "title": "Text becomes tokens",
+      "text": "Models read numbers, not letters. A tokenizer splits text into chunks (roughly ¾ of a word each) and maps every chunk to an ID.",
+      "payload": [
+        [
+          "pieces",
+          "[\"Explain\", \" web\", \"hooks\", \" in\", \" one\", …]",
+          "Common words are one token; rare ones split."
+        ],
+        [
+          "ids",
+          "[849, 3566, 39023, 304, 832, …]",
+          "What the model actually sees."
+        ],
+        [
+          "count",
+          "≈ 30 input tokens",
+          "Input tokens are what you pay for on the way in."
+        ]
+      ]
+    },
+    {
+      "from": "model",
+      "to": "api",
+      "label": "next token…",
+      "title": "The model predicts one token at a time",
+      "text": "For each position it scores every possible next token, picks one (temperature controls how adventurous), appends it, and repeats until it decides to stop.",
+      "payload": [
+        [
+          "candidates",
+          "\" A\" 0.62 · \" Web\" 0.21 · \" It\" 0.09",
+          "Probabilities for the very first output token."
+        ],
+        [
+          "temperature",
+          "0.7",
+          "0 = always the top choice, higher = more variety."
+        ],
+        [
+          "stop",
+          "end-of-turn token or max_tokens",
+          "The two ways a reply ends."
+        ]
+      ]
+    },
+    {
+      "from": "api",
+      "to": "app",
+      "label": "stream (SSE)",
+      "title": "Tokens stream back as they're made",
+      "text": "That's why replies appear word by word. The API pushes small server-sent events instead of waiting for the full answer.",
+      "payload": [
+        [
+          "event",
+          "content_block_delta",
+          "One small chunk of new text."
+        ],
+        [
+          "delta.text",
+          "\" A webhook is\"",
+          "Appended to what's already on screen."
+        ],
+        [
+          "stop_reason",
+          "\"end_turn\"",
+          "Sent last: the model finished on its own."
+        ],
+        [
+          "usage",
+          "{ input_tokens: 30, output_tokens: 24 }",
+          "What the request cost."
+        ]
+      ]
+    },
+    {
+      "from": "app",
+      "to": "user",
+      "label": "answer",
+      "title": "You read the answer",
+      "text": "One request, one response. Everything an agent does is built from repeating this loop with extra context and tools.",
+      "payload": [
+        [
+          "text",
+          "\"A webhook is a URL another app calls the moment something happens.\"",
+          "The final rendered message."
+        ]
+      ]
+    }
+  ]
+}
