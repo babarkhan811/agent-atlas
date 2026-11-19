@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { lessonIndex, loadGlossary } from "@/content";
 import { PageShell } from "@/components/PageShell";
+import { absUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Glossary",
+  alternates: { canonical: absUrl("/glossary/") },
   description: "Plain-English definitions of AI agent, automation and security terms: tokens, tool calling, RAG, MCP, SIEM, SOAR and more.",
 };
 

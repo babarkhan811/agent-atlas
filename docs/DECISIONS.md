@@ -12,7 +12,9 @@ Every dependency and every deviation from the recommended architecture is record
 | `typescript` (dev) | Type safety across content, simulation and UI. |
 | `vitest` (dev) | Fast unit tests for pure layout/projection/content logic. |
 | `@playwright/test` (dev) | End-to-end tests against the exported site in a real browser. |
-| `@axe-core/playwright` (dev) | Automated WCAG checks inside the e2e suite (used from M2). |
+| `@axe-core/playwright` (dev) | Automated WCAG checks inside the e2e suite. |
+
+Labs are plain Python (standard library only) under `labs/`, tested with `unittest` in CI. The guide renders the lab file directly so the published sample is always the tested code.
 
 Fonts are loaded with `next/font/google`, which downloads them at build time and serves them from our own origin (no third-party request at runtime).
 
@@ -20,7 +22,8 @@ Fonts are loaded with `next/font/google`, which downloads them at build time and
 
 - **No Tailwind (yet).** The prototype already has a complete token-based stylesheet (dark/light themes, per-kind colours). Porting it as global CSS keeps M1 pixel-identical; M3 replaces it with a formal token system. Tailwind can be adopted then if it earns its place.
 - **Static export until M5.** The owner has no Vercel/Supabase accounts yet. `output: "export"` lets the new app replace the prototype on GitHub Pages with real per-lesson URLs now. M5 removes the export and moves to Vercel because paid content must be served by server code.
-- **No ESLint in CI for M1.** Next 16 no longer bundles `next lint`; type-checking plus tests cover M1. Revisit in M2.
+- **No ESLint in CI.** Next 16 no longer bundles `next lint`; strict TypeScript, unit, e2e and axe tests cover correctness. Add ESLint if the codebase gains contributors.
+- **Release order.** The owner wants revenue soon, so after M2 the order is M5 (payments) → launch hardening → M3/M4/M6/M7 while the product is on sale.
 - **Lemon Squeezy → Polar.** Lemon Squeezy stopped accepting new sellers on 2026-11-16 (see `SOURCES.md`).
 
 ## Content model

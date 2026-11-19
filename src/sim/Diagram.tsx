@@ -13,9 +13,15 @@ function useMedia(query: string) {
   );
 }
 
-type Props = { lesson: Lesson; step: number; speed: number; idPrefix?: string };
+type Props = {
+  lesson: Lesson; step: number; speed: number; idPrefix?: string;
+  /** Called when a node is activated (click, Enter or Space). */
+  onNode?: (id: string) => void;
+  /** id of the element that describes the current step in words. */
+  describedBy?: string;
+};
 
-export function Diagram({ lesson, step, speed, idPrefix = "e" }: Props) {
+export function Diagram({ lesson, step, speed, idPrefix = "e", onNode, describedBy }: Props) {
   const portrait = useMedia("(max-width: 700px)");
   const reduce = useMedia("(prefers-reduced-motion: reduce)");
   const stage = portrait ? PORTRAIT : LANDSCAPE;
@@ -68,9 +74,19 @@ export function Diagram({ lesson, step, speed, idPrefix = "e" }: Props) {
   }, [activeKey, s.from, s.to, step, speed, reduce, stage]);
 
   const tw = (40 * C30).toFixed(2), th = (20 * C30).toFixed(2);
+  // Descriptions live outside the focusable nodes so each node's name is exactly its visible label.
+  const describe = (id: string) => {
+    const sent = lesson.steps.filter((x) => x.from === id).length;
+    const received = lesson.steps.filter((x) => x.to === id).length;
+    const n = lesson.nodes.find((x) => x.id === id)!;
+    const on = id === s.from || id === s.to;
+    return `${KIND_INFO[n.kind].name}. Sends ${sent} and receives ${received} messages.${on ? " Active in this step." : ""}${onNode ? " Activate to jump to its next message." : ""}`;
+  };
+
   return (
-    <svg className="diagram" viewBox={`0 0 ${stage.w} ${stage.h}`} preserveAspectRatio="xMidYMid meet" role="img"
-      aria-label={`Animated diagram: ${lesson.title}. Step ${step + 1}: ${s.title}`}>
+    <>
+    <svg className="diagram" viewBox={`0 0 ${stage.w} ${stage.h}`} preserveAspectRatio="xMidYMid meet" role="group"
+      aria-label={`Diagram: ${lesson.title}. Step ${step + 1}: ${s.title}`} aria-describedby={describedBy}>
       <defs>
         <pattern id={`${idPrefix}-iso`} width={tw} height="23.09" patternUnits="userSpaceOnUse" patternTransform="scale(1.3)">
           <path d={`M0 11.55 L${th} 0 L${tw} 11.55 L${th} 23.09 Z`} className="gridline" />
@@ -81,8 +97,8 @@ export function Diagram({ lesson, step, speed, idPrefix = "e" }: Props) {
         </radialGradient>
         <mask id={`${idPrefix}-vign`}><rect width={stage.w} height={stage.h} fill={`url(#${idPrefix}-fade)`} /></mask>
       </defs>
-      <rect width={stage.w} height={stage.h} fill={`url(#${idPrefix}-iso)`} mask={`url(#${idPrefix}-vign)`} />
-      <g className="edges">
+      <rect width={stage.w} height={stage.h} fill={`url(#${idPrefix}-iso)`} mask={`url(#${idPrefix}-vign)`} aria-hidden="true" />
+      <g className="edges" aria-hidden="true">
         {es.map((e, k) => {
           const on = e.key === activeKey;
           return (
@@ -93,7 +109,7 @@ export function Diagram({ lesson, step, speed, idPrefix = "e" }: Props) {
         })}
       </g>
       {!reduce && (
-        <g className="ambient">
+        <g className="ambient" aria-hidden="true">
           {es.map((e, k) => (
             <circle key={e.key} className="amb" r="2">
               <animateMotion dur={`${(3.2 + (k % 3) * 0.7).toFixed(1)}s`} begin={`${(k * 0.45).toFixed(2)}s`} repeatCount="indefinite">
@@ -107,20 +123,27 @@ export function Diagram({ lesson, step, speed, idPrefix = "e" }: Props) {
         {lesson.nodes.map((n, j) => {
           const p = nodePos(n, stage);
           const on = n.id === s.from || n.id === s.to;
+          const activate = () => onNode?.(n.id);
           return (
             <g key={n.id} ref={(el) => { if (el) nodeRefs.current.set(n.id, el); else nodeRefs.current.delete(n.id); }}
-              className={`node${on ? " on" : ""}`} transform={`translate(${p.x},${p.y})`} style={{ ["--c" as string]: `var(--k-${n.kind})` }}>
+              className={`node${on ? " on" : ""}`} transform={`translate(${p.x},${p.y})`} style={{ ["--c" as string]: `var(--k-${n.kind})` }}
+              tabIndex={onNode ? 0 : undefined} role={onNode ? "button" : undefined}
+              aria-labelledby={`${idPrefix}-${n.id}-name`} aria-describedby={`${idPrefix}-${n.id}-d`}
+              onClick={onNode ? activate : undefined}
+              onKeyDown={onNode ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); } } : undefined}>
               <ellipse className="ring" cx="0" cy="6" rx="58" ry="26" />
               <g className="float" style={{ animationDelay: `${(-j * 0.7).toFixed(1)}s` }}>
                 <g transform="scale(1.15)"><NodeIcon node={n} /></g>
               </g>
-              <text className="nl" y="48" textAnchor="middle">{n.label}</text>
-              <text className="nt" y="65" textAnchor="middle">{KIND_INFO[n.kind].tag}</text>
+              {/* One text element (label + kind tag, space-separated) so the accessible name equals the visible text. */}
+              <text id={`${idPrefix}-${n.id}-name`} textAnchor="middle">
+                <tspan className="nl" x="0" y="48">{n.label}</tspan>{" "}<tspan className="nt" x="0" y="65">{KIND_INFO[n.kind].tag}</tspan>
+              </text>
             </g>
           );
         })}
       </g>
-      <g ref={pkt} className="pkt" opacity="0" style={{ ["--c" as string]: `var(--k-${to.kind})` }}>
+      <g ref={pkt} className="pkt" opacity="0" aria-hidden="true" style={{ ["--c" as string]: `var(--k-${to.kind})` }}>
         {[5, 4, 3, 2, 1].map((k, idx) => (
           <circle key={k} ref={(el) => { trails.current[idx] = el; }} className="trail" r={(6 - k) * 0.9} opacity={(0.12 * (6 - k)).toFixed(2)} />
         ))}
@@ -131,5 +154,9 @@ export function Diagram({ lesson, step, speed, idPrefix = "e" }: Props) {
         </g>
       </g>
     </svg>
+    <div className="sr-only">
+      {lesson.nodes.map((n) => <span key={n.id} id={`${idPrefix}-${n.id}-d`}>{describe(n.id)}</span>)}
+    </div>
+    </>
   );
 }

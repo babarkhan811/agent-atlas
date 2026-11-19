@@ -6,7 +6,7 @@ import { Shell } from "./Shell";
 export function PageShell({ index, children }: { index: LessonIndexItem[]; children: ReactNode }) {
   return (
     <Shell index={index} pageMode>
-      <main className="page panel">{children}</main>
+      <main className="page panel" id="main" tabIndex={-1}>{children}</main>
     </Shell>
   );
 }

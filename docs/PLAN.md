@@ -25,10 +25,10 @@ Next.js (App Router) + TypeScript, content as JSON validated by Zod, Vitest + Pl
 | # | Milestone | Status |
 |---|---|---|
 | M1 | Next.js foundation, content migration + schema, real URLs, `<Simulation />` port, CI, Pages deploy | **done** (tag `m1`, 2026-11-19) |
-| M2 | Bugs 1–12 and accessibility fixes, each with a regression test; axe 0 serious/critical | todo |
+| M2 | Bugs 1–12 and accessibility fixes, each with a regression test; axe 0 serious/critical | **done** (tag `m2`, 2026-11-19). Bug 10 (paywall) is by design part of M5; its test is marked `fixme`. Real screen-reader pass still needs a human, see `A11Y.md`. |
 | M3 | Landing page with live-sim hero, design tokens, purpose-built mobile layout, Lighthouse ≥ 95 | todo |
 | M4 | Learning paths, lesson template, quizzes, progress, full-content search, timeline scrubber, node inspector | todo |
-| M5 | Auth + Polar payments + server-side gating + leak test (needs owner accounts, see below) | blocked on accounts |
+| M5 | Auth + Polar payments + server-side gating + leak test | next: Vercel, Supabase and Polar sandbox accounts are connected (2026-11-19) |
 | M6 | New/updated content: A2A, MCP refresh, context & caching, reasoning & structured output, observability & cost; template on every lesson; `lastVerified` + sources | todo |
 | M7 | SEO (sitemap, JSON-LD, OG images), privacy-friendly analytics, newsletter, legal pages | todo |
 | M8 | Optional lazy-loaded 3D mode within budget, or a written cut note | todo |

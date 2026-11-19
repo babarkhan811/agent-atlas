@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:labs": "python -m unittest discover -s labs/security -p \"*_test.py\"",
     "content:check": "vitest run tests/unit/content.test.ts"
   },
   "dependencies": {

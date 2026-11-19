@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { themeBootScript } from "@/components/ThemeToggle";
+import { SITE_URL, absUrl } from "@/lib/site";
 import "./globals.css";
 
 // next/font downloads these at build time and serves them from our own origin.
@@ -8,6 +9,9 @@ const sans = Space_Grotesk({ subsets: ["latin"], variable: "--font-sans", displa
 const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500", "700"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(`${SITE_URL}/`),
+  alternates: { canonical: absUrl("/") },
+  manifest: absUrl("/manifest.webmanifest"),
   title: { default: "Agent Atlas · See how AI agents work", template: "%s · Agent Atlas" },
   description:
     "Watch AI agents work, message by message. Interactive simulations of LLMs, tool use, RAG, MCP, multi-agent systems, automation and AI-driven cybersecurity.",
