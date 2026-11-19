@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 const PAGES = [
   ["lesson (network)", "/learn/security/soc-triage/?step=2"],
   ["lesson (sequence)", "/learn/knowledge-protocols/mcp/?step=4&view=sequence"],
+  ["lesson with guide (expert depth)", "/learn/foundations/tool-use/?step=3&depth=expert"],
   ["guide", "/guide/"],
   ["glossary", "/glossary/"],
   ["404", "/learn/foundations/missing/"],

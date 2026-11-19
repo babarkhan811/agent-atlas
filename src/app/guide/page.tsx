@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 // The sample is the real lab file, so the guide always shows tested code.
-const TRIAGE_AGENT_CODE = fs.readFileSync(path.join(process.cwd(), "labs/security/triage_agent.py"), "utf8").trim();
+const TRIAGE_AGENT_CODE = fs.readFileSync(path.join(process.cwd(), "labs/security/lab.py"), "utf8").trim();
 
 function lessonHrefById(id: string) {
   const l = loadContent().lessons.find((x) => x.id === id);
@@ -133,8 +133,8 @@ export default function GuidePage() {
       
         <section id="code">
           <h2>6. Example: a minimal triage agent</h2>
-          <p>Provider-neutral Python with every safeguard from this guide: risk-tagged tools, argument validation, unknown-tool handling, approval for disruptive actions, hourly action limits, a step limit and an audit log. It ships with tests in <code>labs/security/</code>; plug in any LLM client that supports tool calling.</p>
-      <pre tabIndex={0} aria-label="triage_agent.py source code"><code>{TRIAGE_AGENT_CODE}</code></pre>
+          <p>Provider-neutral Python with every safeguard from this guide: risk-tagged tools, argument validation, unknown-tool handling, approval for disruptive actions, hourly action limits, a step limit and an audit log. It ships with tests and a TypeScript version in <code>labs/security/</code>; plug in any LLM client that supports tool calling.</p>
+      <pre tabIndex={0} aria-label="labs/security/lab.py source code"><code>{TRIAGE_AGENT_CODE}</code></pre>
         </section>
       
         <section id="human">

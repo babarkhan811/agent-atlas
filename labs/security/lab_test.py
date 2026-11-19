@@ -1,6 +1,6 @@
 import unittest
 
-from triage_agent import DISRUPTIVE, READ, RateLimiter, Reply, Tool, ToolCall, triage
+from lab import DISRUPTIVE, READ, RateLimiter, Reply, Tool, ToolCall, triage
 
 
 class ScriptedLLM:

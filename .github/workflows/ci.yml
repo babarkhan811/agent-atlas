@@ -26,6 +26,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: npm run test:labs
+      - run: node scripts/check-freshness.mjs
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

@@ -6,197 +6,283 @@
   "category": "Cybersecurity automation",
   "title": "Software agents + AI agents working together",
   "summary": "Small programs on every machine are the eyes and hands. The AI agent is the brain that decides what to look at and what to do.",
+  "seoTitle": "Software agents vs AI agents in security automation",
+  "seoDescription": "How endpoint software agents (EDR, osquery) and AI agents work together to detect, investigate and contain an attack, with a human approving disruptive steps.",
+  "objectives": [
+    "Distinguish software agents on endpoints from AI agents that reason over their data.",
+    "Follow one alert from endpoint telemetry through AI investigation to approved containment.",
+    "Explain which actions an AI security agent may take on its own and which need a human."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    { "title": "osquery: processes table specification", "url": "https://github.com/osquery/osquery/blob/master/specs/processes.table" },
+    { "title": "osquery documentation", "url": "https://osquery.readthedocs.io/en/stable/" },
+    { "title": "MITRE ATT&CK T1218.011: System Binary Proxy Execution, Rundll32", "url": "https://attack.mitre.org/techniques/T1218/011/" },
+    { "title": "MITRE ATT&CK T1566.001: Phishing, Spearphishing Attachment", "url": "https://attack.mitre.org/techniques/T1566/001/" },
+    { "title": "NIST SP 800-61 Rev. 3: Incident Response Recommendations", "url": "https://csrc.nist.gov/pubs/sp/800/61/r3/final" },
+    { "title": "Velociraptor documentation", "url": "https://docs.velociraptor.app/" }
+  ],
   "nodes": [
-    {
-      "id": "laptop",
-      "label": "Laptop agent",
-      "kind": "tool",
-      "x": 9,
-      "y": 20
-    },
-    {
-      "id": "server",
-      "label": "Server agent",
-      "kind": "tool",
-      "x": 9,
-      "y": 80
-    },
-    {
-      "id": "siem",
-      "label": "SIEM",
-      "kind": "data",
-      "x": 36,
-      "y": 50
-    },
-    {
-      "id": "ai",
-      "label": "AI security agent",
-      "kind": "app",
-      "x": 66,
-      "y": 50
-    },
-    {
-      "id": "analyst",
-      "label": "Analyst",
-      "kind": "user",
-      "x": 90,
-      "y": 15
-    },
-    {
-      "id": "guard",
-      "label": "Approval gate",
-      "kind": "guard",
-      "x": 90,
-      "y": 85
-    }
+    { "id": "laptop", "label": "Laptop agent", "kind": "tool", "x": 9, "y": 20 },
+    { "id": "server", "label": "Server agent", "kind": "tool", "x": 9, "y": 80 },
+    { "id": "siem", "label": "SIEM", "kind": "data", "x": 36, "y": 50 },
+    { "id": "ai", "label": "AI security agent", "kind": "app", "x": 66, "y": 50 },
+    { "id": "analyst", "label": "Analyst", "kind": "user", "x": 90, "y": 15 },
+    { "id": "guard", "label": "Approval gate", "kind": "guard", "x": 90, "y": 85 }
   ],
   "steps": [
     {
-      "from": "laptop",
-      "to": "siem",
-      "label": "telemetry",
+      "from": "laptop", "to": "siem", "label": "telemetry",
       "title": "Software agents watch every machine",
-      "text": "A software agent is a small program installed on each laptop and server (EDR, osquery, a Wazuh agent). It records what happens and sends it to the SIEM. It doesn't think; it observes and obeys.",
+      "text": "A software agent is a small program installed on each laptop and server. It records what happens and sends it to the SIEM.",
       "payload": [
-        [
-          "event",
-          "process_start",
-          ""
-        ],
-        [
-          "process",
-          "rundll32.exe",
-          ""
-        ],
-        [
-          "parent",
-          "outlook.exe",
-          "Email software starting system tools is unusual."
-        ],
-        [
-          "host",
-          "SALES-LT-14",
-          ""
-        ]
-      ]
+        ["event", "process_start", "One record per program launch; agents also report network, file and login events."],
+        ["process", "rundll32.exe", "A built-in Windows program that runs code from DLL files, often abused by attackers."],
+        ["parent", "OUTLOOK.EXE", "The email client started it. Email software launching system tools is unusual."],
+        ["host", "SALES-LT-14", "Which machine, so the event can be tied to an owner and location."],
+        ["user", "a.khan", "Which account was logged in when it happened."]
+      ],
+      "depth": {
+        "beginner": "Every company laptop and server runs a small, quiet program called a software agent. Think of it as a security camera inside the computer: it notes every program that starts, every network connection and every login, and sends those notes to a central system. It does not think or decide anything. Here it records something odd: the email program Outlook just started a Windows tool called rundll32.",
+        "practitioner": "Endpoint agents such as EDR sensors, osquery or a SIEM vendor's collector stream telemetry to a central platform: process starts with parent-child relationships, command lines, network connections, file writes and authentication events. Parent-child data matters most here: Office or email applications spawning system binaries like rundll32, PowerShell or mshta is a well-known sign of a malicious attachment. Coverage gaps, machines without an agent, are blind spots no AI can fix.",
+        "expert": "Collection quality determines detection quality: you need command lines, hashes, signer information and reliable parent PIDs, plus clock synchronisation across hosts. Tune collection to avoid flooding the pipeline, and protect the agent itself against tampering, since attackers routinely try to disable sensors. Map telemetry to MITRE ATT&CK data sources to see which techniques you can actually observe."
+      },
+      "walk": {
+        "why": "Attacks happen on endpoints. Without telemetry from each machine, the security team and any AI working for them are blind.",
+        "wrong": "Agents missing on some machines, disabled by attackers, or configured to drop command lines leave gaps that make investigations guesswork.",
+        "example": "In a common phishing pattern, a user opens an invoice attachment, Outlook launches a script host, and the endpoint agent's process-tree record is what reveals it."
+      }
     },
     {
-      "from": "server",
-      "to": "siem",
-      "label": "logs",
+      "from": "server", "to": "siem", "label": "logs",
       "title": "…and every server",
       "text": "Servers, firewalls and cloud accounts send logs too. The SIEM stores everything in one searchable place.",
       "payload": [
-        [
-          "volume",
-          "≈ 40 million events / day",
-          "Far too many for humans to read; that's why automation is needed."
-        ]
-      ]
+        ["volume", "≈ 40 million events / day", "Illustrative for a mid-sized company. Far too many for people to read."],
+        ["sources", "endpoints · firewalls · identity · cloud", "Different views of the same activity, joined by time, host and user."],
+        ["retention", "90 days hot, 1 year archive", "How long data stays searchable; investigations often need weeks of history."]
+      ],
+      "depth": {
+        "beginner": "Servers, firewalls, the login system and cloud accounts all send their own notes to the same central place, called a SIEM (Security Information and Event Management). It is like a library where every camera's footage is stored and indexed so you can search it. A company can generate tens of millions of notes a day, far more than any person could read, which is why automation is needed.",
+        "practitioner": "The SIEM normalises events from many sources into common fields (host, user, process, IP) so they can be correlated and searched. Detection rules run continuously over the stream. Retention determines how far back you can investigate; many breaches are discovered weeks after the first event, so short retention can make root-cause analysis impossible.",
+        "expert": "Normalisation choices (for example a common schema such as ECS or OCSF) decide how easily an AI agent can write correct queries across sources. Cost scales with ingest volume, so teams filter noisy sources, which can silently remove evidence. Document field meanings for the AI agent the same way you would for a new analyst: it will write better queries."
+      },
+      "walk": {
+        "why": "Correlating endpoint, network and identity data reveals attacks that look harmless from any single source.",
+        "wrong": "Unparsed or inconsistent fields make searches miss events, and over-aggressive filtering to save cost deletes the evidence you later need.",
+        "example": "A suspicious login from a new country only becomes alarming when the SIEM also shows a mailbox rule created minutes later by the same account."
+      }
     },
     {
-      "from": "siem",
-      "to": "ai",
-      "label": "alert",
+      "from": "siem", "to": "ai", "label": "alert",
       "title": "A rule matches and hands off to the AI agent",
       "text": "Detection rules turn raw events into alerts. Instead of landing in a human queue, the alert goes to the AI agent first.",
       "payload": [
-        [
-          "rule",
-          "\"Office app spawned a system binary\"",
-          ""
-        ]
-      ]
+        ["rule", "\"Office app spawned a system binary\"", "A detection rule matched the process tree from step 1."],
+        ["severity", "high", "Set by the rule. Used to prioritise, but often noisy."],
+        ["ATT&CK", "T1566.001 · T1218.011", "Spearphishing attachment and rundll32 proxy execution: the techniques this pattern suggests."],
+        ["host", "SALES-LT-14", "Carried over so the agent knows where to look."]
+      ],
+      "depth": {
+        "beginner": "The SIEM has rules that act like tripwires. One rule says: \"if an email or Office program starts a system tool, raise an alert\". It fires. Normally that alert would wait in a queue for a busy human analyst. Here it goes first to an AI security agent, an AI model connected to investigation tools, which can start gathering evidence immediately, day or night.",
+        "practitioner": "Detection rules (vendor rules, Sigma rules or custom queries) produce alerts with severity and context. Many alerts are false positives, so triage is the bottleneck in most security operations centres. The AI agent receives the alert as data, wrapped as untrusted content, with a defined goal: decide whether it is real, gather evidence, and propose next steps.",
+        "expert": "Give the agent the alert plus environment context (asset criticality, owner, known-good software) and a fixed output format. Alert text can include attacker-controlled strings such as file names or command lines, so treat it as a prompt-injection surface. Route only alert types you have evaluated; keep others in the human queue until the agent proves itself."
+      },
+      "walk": {
+        "why": "Automated first-pass triage turns hours of queue time into minutes, which matters because attackers move quickly once inside.",
+        "wrong": "Noisy rules flood the agent too; garbage in, garbage out. Alert fields containing attacker text can also try to steer the AI.",
+        "example": "Many SOCs now let AI triage known-noisy alert types overnight so the morning shift starts with summarised cases instead of raw alerts."
+      }
     },
     {
-      "from": "ai",
-      "to": "laptop",
-      "label": "live query",
+      "from": "ai", "to": "laptop", "label": "live query",
       "title": "The AI asks the machine follow-up questions",
       "text": "This is where the two kinds of agent meet: the AI decides what it needs to know, and the software agent runs the query on the real machine.",
       "payload": [
-        [
-          "query",
-          "SELECT pid, name, cmdline FROM processes WHERE parent = 'outlook.exe'",
-          "An osquery-style read-only question."
-        ],
-        [
-          "permission",
-          "read",
-          "Read-only queries can run without approval."
-        ]
-      ]
+        ["query", "SELECT p.pid, p.name, p.cmdline FROM processes p JOIN processes pp ON p.parent = pp.pid WHERE pp.name = 'OUTLOOK.EXE';", "osquery SQL: find programs whose parent is Outlook. `parent` holds the parent's process ID."],
+        ["permission", "read", "Read-only queries can run without approval."],
+        ["timeout", "30 s", "Live queries reach many machines; bound how long the agent waits."]
+      ],
+      "depth": {
+        "beginner": "This is where the two kinds of agent meet. The AI decides what it wants to know, for example \"what exactly did Outlook start, and with what instructions?\". It cannot touch the laptop itself, so it asks the laptop's software agent to look. The software agent runs the question on the real machine and reports back. The AI is the detective; the software agent is the officer at the scene.",
+        "practitioner": "Tools such as osquery expose the operating system as SQL tables (processes, connections, files), and response tools like Velociraptor run collection queries across fleets. The AI agent calls a read-only tool that sends a query to the endpoint. Note the join: in osquery's `processes` table, `parent` is the parent's PID, so finding children of Outlook means joining the table to itself.",
+        "expert": "Expose curated, parameterised queries as tools rather than free-form SQL where possible; free-form queries are powerful but harder to validate and can be expensive across thousands of hosts. Scope queries to the hosts in the alert, cap result sizes, and log every query for the audit trail. Results from the endpoint are evidence; preserve them before any containment changes the machine's state."
+      },
+      "walk": {
+        "why": "Deciding what to ask is reasoning, which suits an AI; running the query on the machine needs local access, which suits a software agent.",
+        "wrong": "Badly written queries return nothing and lead to false \"benign\" verdicts. Unbounded fleet-wide queries can overload endpoints.",
+        "example": "Incident responders routinely run live process and network queries on a suspect laptop before isolating it, to capture volatile evidence."
+      }
     },
     {
-      "from": "laptop",
-      "to": "ai",
-      "label": "results",
+      "from": "laptop", "to": "ai", "label": "results",
       "title": "Evidence comes back",
-      "text": "",
+      "text": "The query results show exactly what ran and where it connected.",
       "payload": [
-        [
-          "cmdline",
-          "rundll32.exe C:\\Users\\…\\AppData\\Temp\\x.dll,Start",
-          "Running a DLL from a temp folder is a classic malware trick."
-        ],
-        [
-          "network",
-          "connected to 203.0.113.77:443",
-          ""
-        ]
-      ]
+        ["cmdline", "rundll32.exe C:\\Users\\…\\AppData\\Local\\Temp\\x.dll,Start", "Running a DLL from a temp folder is a classic malware trick."],
+        ["signed", "false", "The DLL has no trusted signature, unlike legitimate software."],
+        ["network", "connected to 203.0.113.77:443", "Outbound connection right after execution: possible command-and-control (documentation IP range used here)."]
+      ],
+      "depth": {
+        "beginner": "The laptop's agent reports back: Outlook started rundll32, which loaded an unsigned file from a temporary folder, and moments later the laptop connected to an unfamiliar server on the internet. Each fact alone might be innocent; together they look like a malicious email attachment that has started talking to an attacker's server.",
+        "practitioner": "The agent combines evidence: execution from a user-writable temp path, an unsigned DLL, an Office or email parent, and an outbound connection shortly after. It can enrich the IP and file hash with threat intelligence in parallel. Each piece is weak alone; the combination is strong, which is exactly what correlation is for.",
+        "expert": "Ask the model to separate observed facts from inferences in its notes, and to list what evidence would change its verdict. Store raw tool outputs alongside the summary so humans can verify. Indicators such as IPs and hashes should be extracted into structured fields for blocking and for hunting across other hosts."
+      },
+      "walk": {
+        "why": "Verdicts built from several independent signals are far more reliable than a single rule match.",
+        "wrong": "Models can over-read thin evidence or miss a benign explanation such as an in-house tool. Missing context, like an allow-list of internal software, leads to false alarms.",
+        "example": "Many ransomware intrusions begin with exactly this pattern: an attachment, a system binary loading attacker code, and a callback to a remote server."
+      }
     },
     {
-      "from": "ai",
-      "to": "analyst",
-      "label": "verdict + plan",
+      "from": "ai", "to": "analyst", "label": "verdict + plan",
       "title": "The AI explains and proposes",
       "text": "The AI writes up what happened, how confident it is, and what it wants to do, but it can't run disruptive actions on its own.",
       "payload": [
-        [
-          "verdict",
-          "malicious · confidence 0.9",
-          ""
-        ],
-        [
-          "proposal",
-          "kill process · isolate SALES-LT-14 · block 203.0.113.77",
-          ""
-        ]
-      ]
+        ["verdict", "malicious · confidence 0.9", "The agent's assessment, with confidence to help prioritise."],
+        ["evidence", "process tree · unsigned DLL · outbound connection", "The facts behind the verdict, linked to raw results."],
+        ["proposal", "kill process · isolate SALES-LT-14 · block 203.0.113.77", "Containment steps that need approval because they disrupt work."]
+      ],
+      "depth": {
+        "beginner": "The AI writes a short report for a human analyst: what happened, how sure it is, the evidence, and what it recommends. Here it recommends stopping the program, cutting the laptop off the network and blocking the attacker's server. It does not do these things yet, because cutting someone's laptop off in the middle of their work is a decision a person should make.",
+        "practitioner": "A good case summary has a verdict with confidence, a short timeline, the evidence with links, the mapped ATT&CK techniques and proposed actions tagged by risk. Read-only enrichment already ran automatically; disruptive steps wait for approval. Consistent structure lets analysts review in a minute and lets you evaluate the agent's accuracy over time.",
+        "expert": "Calibrate confidence against past outcomes: if \"0.9\" verdicts are wrong a third of the time, the number misleads. Track agreement rate with analysts and missed true positives. Keep the agent's role in the case record explicit, which matters for audits and post-incident reviews."
+      },
+      "walk": {
+        "why": "Humans review faster with a clear summary, and keeping disruptive actions behind approval limits the damage of a wrong verdict.",
+        "wrong": "Overconfident summaries, or analysts rubber-stamping every proposal, defeat the purpose of the approval step.",
+        "example": "An AI-written case summary lets a night-shift analyst confirm a phishing compromise in minutes instead of reconstructing the timeline by hand."
+      }
     },
     {
-      "from": "analyst",
-      "to": "guard",
-      "label": "approve",
+      "from": "analyst", "to": "guard", "label": "approve",
       "title": "A person approves",
-      "text": "",
+      "text": "The analyst reviews the evidence and approves containment.",
       "payload": [
-        [
-          "decision",
-          "approved by on-call analyst",
-          ""
-        ]
-      ]
+        ["decision", "approved", "Recorded with the reviewer's identity and time."],
+        ["by", "on-call analyst", "The accountable human for this action."],
+        ["scope", "isolate host, kill process, block IP", "Exactly what was approved; nothing more may run."]
+      ],
+      "depth": {
+        "beginner": "A human analyst reads the report, checks the evidence and clicks approve. This is the human-in-the-loop moment: the AI did the legwork in minutes, but a person stays accountable for actions that affect a colleague's work. The approval is recorded with the analyst's name and the time.",
+        "practitioner": "An approval gate in code, not just a prompt instruction, ensures disruptive tools run only after a recorded human decision for that exact scope. Approvals should show what will happen, to which assets, and how to undo it. As trust grows, specific low-risk actions on specific alert types can move from \"approve\" to \"automatic with notification\".",
+        "expert": "Defend against approval fatigue with good summaries, batching of similar cases and clear risk labels. Bind approvals to the specific action parameters so a manipulated agent cannot reuse one approval for something else. NIST's incident response guidance emphasises defined roles and decision authority; encode those roles in the gate."
+      },
+      "walk": {
+        "why": "Accountability and context: the analyst may know the user is presenting to a client right now, which changes how containment should happen.",
+        "wrong": "If approvals are slow, attackers keep working; if they are automatic in practice, the gate is theatre.",
+        "example": "Many organisations let automation isolate ordinary laptops but require a human for servers, executives' devices or anything production-facing."
+      }
     },
     {
-      "from": "guard",
-      "to": "laptop",
-      "label": "isolate",
+      "from": "guard", "to": "laptop", "label": "isolate",
       "title": "The software agent carries it out",
       "text": "The same small program that collected the data now enforces the decision: it kills the process and cuts the laptop off the network, while keeping a line open to the security team.",
       "payload": [
-        [
-          "actions",
-          "process killed · host isolated",
-          ""
-        ],
-        [
-          "time",
-          "6 minutes from alert to containment",
-          ""
-        ]
-      ]
+        ["actions", "process killed · host isolated", "Executed by the endpoint agent, which has local control of the machine."],
+        ["channel", "management connection kept open", "Isolation blocks other traffic but lets responders keep investigating remotely."],
+        ["time", "about 6 minutes from alert to containment", "Illustrative. Manual handling of the same alert often takes much longer."]
+      ],
+      "depth": {
+        "beginner": "The same little program that reported the problem now acts on it. It stops the malicious program and disconnects the laptop from the network, except for a private line to the security team so they can keep investigating. The attacker's connection is cut. From alert to containment took minutes, and a person approved the important step.",
+        "practitioner": "EDR network isolation blocks all traffic except the management channel to the security platform, so responders can still collect evidence and later release the host. The action, its approval and its result are written to the case timeline. Follow-up work includes hunting for the same file hash or IP on other machines and resetting the user's credentials.",
+        "expert": "Containment changes the machine's state, so capture volatile evidence first when the risk allows. Plan the release criteria and test isolation regularly; an isolation feature that fails during a real incident is worse than none. Feed the outcome back into evaluations so the agent's verdicts and proposals keep improving."
+      },
+      "walk": {
+        "why": "Endpoint agents already have local control, so the fastest, most reliable way to contain a machine is through them.",
+        "wrong": "Isolation without a management channel cuts off your own investigation, and forgetting to release hosts leaves employees stranded.",
+        "example": "Major EDR platforms offer one-click host isolation that keeps the console connection alive, which is exactly what playbooks automate here."
+      }
+    }
+  ],
+  "article": {
+    "promise": "See how small endpoint programs and an AI agent split the work of stopping an attack: one observes and acts, the other reasons, and a human approves.",
+    "thirtySeconds": [
+      "Software agents on every machine collect telemetry and can carry out actions such as killing a process or isolating a host.",
+      "An AI agent receives alerts, decides what evidence it needs, queries the endpoints and writes a verdict with proposed actions.",
+      "Read-only steps run automatically; disruptive containment waits for a human, then the software agent enforces it."
+    ],
+    "whyItMatters": "Security teams face more alerts than people can read, and attackers move fast once inside. Pairing reliable endpoint agents with an AI investigator can cut triage from hours to minutes, but only if responsibilities are clear: software agents are the trustworthy eyes and hands, the AI does the reasoning, and humans keep authority over disruptive actions. Getting this split wrong either leaves the AI blind or gives it too much power.",
+    "analogy": "A building has cameras and door locks on every floor (software agents), a detective in the control room who reviews footage and decides what to check next (the AI agent), and a security manager who must sign off before any floor is locked down (the analyst).",
+    "audience": "SOC analysts, security engineers and IT leaders evaluating AI-assisted detection and response, plus developers building security automation.",
+    "minutes": 18,
+    "prerequisites": ["tool-use", "human-in-loop"],
+    "deepDives": [
+      {
+        "title": "Two meanings of \"agent\"",
+        "body": "In security, \"agent\" has long meant a small program installed on a machine, such as an EDR sensor or an osquery daemon. It collects data and executes commands but makes no judgements.\n\nAn AI agent is a language model that calls tools in a loop to reach a goal. It reasons about evidence but cannot touch a machine unless a tool lets it. Good architectures use both and keep the boundary explicit."
+      },
+      {
+        "title": "Process trees as evidence",
+        "body": "Every program on a computer is started by another program, forming a tree. Legitimate patterns are predictable: Explorer starts Word, Word opens documents. Suspicious patterns stand out: Outlook or Word starting rundll32, PowerShell or mshta.\n\nMITRE ATT&CK documents these techniques, for example T1566.001 for malicious attachments and T1218.011 for abusing rundll32, which helps both humans and AI agents describe what they see consistently."
+      },
+      {
+        "title": "Risk-tagged actions",
+        "body": "Tag every tool the AI can call as read-only, reversible or disruptive. Read-only queries and enrichment can run freely. Reversible steps such as quarantining a single file can run automatically with logging. Disruptive steps such as isolating hosts or disabling accounts need a recorded human approval.\n\nThe tags live in code, so the policy holds even if the model is confused or manipulated."
+      }
+    ],
+    "production": [
+      {
+        "title": "Coverage gaps and tampered sensors",
+        "body": "Machines without agents, or agents disabled by an attacker, produce silence that looks like safety. Monitor agent health and alert when telemetry from a host stops unexpectedly."
+      },
+      {
+        "title": "Prompt injection through alert data",
+        "body": "File names, command lines and email subjects are attacker-controlled. Wrap alert content as untrusted data and never let it change which tools the AI may use."
+      },
+      {
+        "title": "False positives and approval fatigue",
+        "body": "If the AI proposes isolation too often, analysts start approving without reading. Measure precision per alert type and only automate where the track record supports it."
+      },
+      {
+        "title": "Evidence and audit",
+        "body": "Log every query, verdict, approval and action with timestamps and identities. Preserve raw results before containment so post-incident reviews and any legal follow-up have reliable evidence."
+      }
+    ],
+    "lab": {
+      "title": "A triage agent with risk-tagged tools",
+      "intro": "The reference triage agent from the build guide, in Python and TypeScript: risk-tagged tools, argument validation, unknown-tool handling, approval for disruptive actions, hourly action limits and an audit log. Plug in any LLM client that supports tool calling; the tests use a scripted model.",
+      "dir": "labs/security"
+    },
+    "takeaways": [
+      "Software agents observe and act on machines; AI agents reason about what to check and what to do.",
+      "Detection rules raise alerts, and the AI agent turns them into investigated cases with evidence.",
+      "Read-only queries can run automatically; disruptive containment needs a recorded human approval.",
+      "Process trees, signatures and network connections together make strong evidence; one signal rarely does.",
+      "Alert data is attacker-influenced, so treat it as untrusted input to the AI."
+    ],
+    "faq": [
+      { "q": "Will AI agents replace endpoint security software?", "a": "No. The AI agent depends on endpoint agents for both visibility and action. It adds reasoning on top of the data they collect." },
+      { "q": "Can the AI isolate a machine on its own?", "a": "It can if you allow it, but most teams require human approval for disruptive actions until the agent has a measured track record on that alert type, and keep approval for critical assets permanently." },
+      { "q": "Which tools does this pattern work with?", "a": "Any EDR or endpoint agent with an API for queries and response actions, open-source options such as osquery, Velociraptor and Wazuh, and any SIEM with a search API. The AI side can use any model that supports tool calling." },
+      { "q": "How do I know the AI's verdicts are good?", "a": "Run it in shadow mode alongside analysts, then measure agreement, missed true positives and false alarms per alert type before allowing any automatic action." }
+    ],
+    "related": ["soc-triage", "incident-response", "human-in-loop", "prompt-injection"]
+  },
+  "quiz": [
+    {
+      "q": "In this lesson, what is the endpoint software agent's role?",
+      "options": ["Decide whether the alert is malicious", "Collect telemetry and carry out approved actions on the machine", "Approve containment", "Write detection rules"],
+      "answer": 1,
+      "explain": "Software agents observe and act on machines but make no judgements. The AI reasons, and the analyst approves."
+    },
+    {
+      "q": "In osquery's `processes` table, how do you find programs started by Outlook?",
+      "options": ["WHERE parent = 'OUTLOOK.EXE'", "Join the table to itself on parent = pid and filter the parent's name", "WHERE name LIKE '%outlook%'", "Query the users table"],
+      "answer": 1,
+      "explain": "`parent` holds the parent's process ID, not its name, so you join processes to itself to filter by the parent's name."
+    },
+    {
+      "q": "Which action should usually require human approval?",
+      "options": ["Looking up an IP's reputation", "Running a read-only process query", "Isolating a laptop from the network", "Writing a case summary"],
+      "answer": 2,
+      "explain": "Isolation disrupts a person's work, so it is classed as disruptive and gated behind a recorded approval."
+    },
+    {
+      "q": "Why is alert text a prompt-injection risk?",
+      "options": ["It is usually very long", "Attackers control parts of it, such as file names and command lines", "SIEMs add hidden instructions", "Alerts are written by AI"],
+      "answer": 1,
+      "explain": "Strings inside alerts come from the attacker's activity, so the AI must treat them as data, not instructions."
     }
   ]
 }

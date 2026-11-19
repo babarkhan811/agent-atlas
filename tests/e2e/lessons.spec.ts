@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 
-type L = { id: string; path: string; title: string; nodes: unknown[]; steps: { title: string }[] };
+type L = { id: string; path: string; title: string; seoTitle?: string; nodes: unknown[]; steps: { title: string }[] };
 const dir = path.join(process.cwd(), "content/lessons");
 const lessons: L[] = fs.readdirSync(dir).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")));
 
@@ -16,7 +16,7 @@ test.describe("every lesson renders like the prototype", () => {
       await expect(page.locator("svg.diagram .node")).toHaveCount(l.nodes.length);
       await expect(page.locator(".tt tbody tr")).toHaveCount(l.steps.length);
       await expect(page.locator(".msg h3")).toHaveText(l.steps[0]!.title);
-      await expect(page).toHaveTitle(`${l.title} · Agent Atlas`);
+      await expect(page).toHaveTitle(`${l.seoTitle ?? l.title} · Agent Atlas`);
       expect(errors).toEqual([]);
     });
   }

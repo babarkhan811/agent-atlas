@@ -6,170 +6,248 @@
   "category": "Foundations",
   "title": "What happens when you prompt an LLM",
   "summary": "Follow one question from your keyboard to the model and back, token by token.",
+  "seoTitle": "What happens when you prompt an LLM: tokens, requests and streaming",
+  "seoDescription": "Follow one question to a large language model and back: the HTTPS request, tokenization, next-token prediction, streaming events and stop reasons.",
+  "objectives": [
+    "Describe the request a chat app sends to an LLM API and why it re-sends the whole conversation every turn.",
+    "Explain what tokens are and how they drive cost, speed and context limits.",
+    "Read a streamed response and tell a finished answer from one cut off by max_tokens."
+  ],
+  "lastVerified": "2026-11-19",
+  "sources": [
+    { "title": "Anthropic: Streaming messages (event types and order)", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" },
+    { "title": "OpenAI: Streaming API responses", "url": "https://developers.openai.com/api/docs/guides/streaming-responses" },
+    { "title": "Google: Gemini Interactions API, text generation", "url": "https://ai.google.dev/gemini-api/docs/interactions/text-generation" },
+    { "title": "OpenAI Help: What are tokens and how to count them", "url": "https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them" }
+  ],
   "nodes": [
-    {
-      "id": "user",
-      "label": "You",
-      "kind": "user",
-      "x": 9,
-      "y": 50
-    },
-    {
-      "id": "app",
-      "label": "Chat app",
-      "kind": "app",
-      "x": 35,
-      "y": 50
-    },
-    {
-      "id": "api",
-      "label": "LLM API",
-      "kind": "external",
-      "x": 63,
-      "y": 50
-    },
-    {
-      "id": "model",
-      "label": "Model",
-      "kind": "model",
-      "x": 90,
-      "y": 50
-    }
+    { "id": "user", "label": "You", "kind": "user", "x": 9, "y": 50 },
+    { "id": "app", "label": "Chat app", "kind": "app", "x": 35, "y": 50 },
+    { "id": "api", "label": "LLM API", "kind": "external", "x": 63, "y": 50 },
+    { "id": "model", "label": "Model", "kind": "model", "x": 90, "y": 50 }
   ],
   "steps": [
     {
-      "from": "user",
-      "to": "app",
-      "label": "prompt",
+      "from": "user", "to": "app", "label": "prompt",
       "title": "You type a question",
       "text": "Nothing smart has happened yet. The app just holds your text and the conversation so far.",
       "payload": [
-        [
-          "text",
-          "\"Explain webhooks in one sentence\"",
-          "Your raw message."
-        ]
-      ]
+        ["text", "\"Explain webhooks in one sentence\"", "Your raw message, exactly as typed."],
+        ["history", "[ ] (empty: first message)", "Earlier turns of this chat. The app stores them, not the model."]
+      ],
+      "depth": {
+        "beginner": "You type a question and press Enter. At this moment nothing intelligent has happened. The chat app on your phone or in your browser simply holds your words in memory, along with anything you said earlier in the same chat. Think of it as writing a letter: the letter exists, but it has not been posted yet. Everything the model later \"knows\" about this conversation has to be packed into that letter by the app.",
+        "practitioner": "The client keeps the conversation as an ordered list of turns, each with a role (`user` or `assistant`) and content. Your new message is appended as a `user` turn. Nothing is sent yet, so this is the cheapest moment to validate input: trim whitespace, block empty messages, cap length, and strip anything you never want to reach a third-party API, such as secrets pasted by accident. The history list is the app's responsibility; the API keeps no session for you.",
+        "expert": "State lives entirely client-side in a stateless Messages-style API. Some providers offer server-side state (for example a previous-response ID), which trades bandwidth for lock-in and retention questions. Either way you need a policy for trimming or summarising history before it outgrows the context window, and for personal data: anything stored here may later be logged, cached or replayed. Pre-flight checks belong here too, such as counting tokens before sending and redacting PII."
+      },
+      "walk": {
+        "why": "Models are stateless functions: text in, text out. Keeping the history in the app lets any server answer any request, which is how providers scale to millions of users.",
+        "wrong": "Apps that never trim history eventually hit the context limit, get slower and more expensive every turn, or quietly drop the oldest messages so the model \"forgets\" instructions from the start.",
+        "example": "When you start a new chat in a consumer AI app, the model has no memory of yesterday's chat unless the app has a separate memory feature that pastes relevant notes back in."
+      }
     },
     {
-      "from": "app",
-      "to": "api",
-      "label": "POST /v1/messages",
+      "from": "app", "to": "api", "label": "POST /v1/messages",
       "title": "The app sends an HTTPS request",
       "text": "Chat apps are thin clients. Every turn, they send the whole conversation again, because the model itself keeps no memory between calls.",
       "payload": [
-        [
-          "model",
-          "\"llm-large\"",
-          "Which model to run."
-        ],
-        [
-          "max_tokens",
-          "512",
-          "Hard cap on how long the answer can be."
-        ],
-        [
-          "system",
-          "\"You are a concise tutor.\"",
-          "Instructions that shape every reply."
-        ],
-        [
-          "messages",
-          "[{ role: \"user\", content: \"Explain webhooks…\" }]",
-          "The full chat history, oldest first."
-        ]
-      ]
+        ["model", "\"llm-large\"", "Which model to run. Real APIs use exact IDs; this lesson uses a neutral placeholder."],
+        ["max_tokens", "512", "Hard cap on how long the answer can be. Hitting it cuts the reply off mid-sentence."],
+        ["system", "\"You are a concise tutor.\"", "Instructions that shape every reply. Set by the app, not the user."],
+        ["messages", "[{ role: \"user\", content: \"Explain webhooks…\" }]", "The full chat history, oldest first. Re-sent on every turn."],
+        ["stream", "true", "Ask for the reply in small pieces as it is generated instead of all at once."]
+      ],
+      "depth": {
+        "beginner": "Now the letter is posted. The app sends your conversation over the internet to the AI company's servers, using the same secure HTTPS connection your bank uses. Along with your words, it sends a few settings: which model to use, how long the answer may be, and some standing instructions the app's makers wrote, such as \"be concise\". Importantly, it sends the whole conversation every time, not just your latest message.",
+        "practitioner": "The request is a JSON body sent with an API key in a header. `model` picks the model, `max_tokens` caps the output, `system` holds operator instructions, and `messages` carries the full history. `stream: true` asks for server-sent events. The shape shown here follows Anthropic's Messages API; other providers use different names for the same ideas (see Expert). Because the whole history is re-sent, input cost grows with every turn of a long chat.",
+        "expert": "Keep the request prefix stable (tools, then system prompt, then old turns) so provider-side prompt caching can reuse it; a timestamp in the system prompt silently defeats caching. Set client timeouts and retries for 429 and 5xx responses with backoff. Never ship the API key to a browser: browser apps should call your own backend, which adds the key. Log request IDs, not full prompts, unless you have a retention policy."
+      },
+      "walk": {
+        "why": "HTTPS plus JSON works from any language and any device, and a stateless request means the provider can route each call to whichever machine has capacity.",
+        "wrong": "Leaked API keys are the most common incident: a key committed to GitHub or embedded in a mobile app can run up a large bill within hours. Other failures are rate-limit errors (429) under load and timeouts on very long answers.",
+        "example": "A customer-support widget on a shop website sends the visitor's chat to the shop's own server, which adds the secret key and forwards the request to the LLM provider."
+      },
+      "providers": {
+        "anthropic": "`POST /v1/messages` with `model`, `max_tokens` (required), `system`, `messages`, optional `stream`.",
+        "openai": "Responses API: `POST /v1/responses` with `model`, `instructions` (system-style guidance) and `input` (a string or a list of items). Output length is capped with `max_output_tokens`.",
+        "gemini": "Interactions API: `POST /v1beta/interactions` with `model`, `input` and an optional `system_instruction`; it can keep history server-side via `previous_interaction_id`. The older generateContent API is still supported but labelled legacy."
+      }
     },
     {
-      "from": "api",
-      "to": "model",
-      "label": "tokens",
+      "from": "api", "to": "model", "label": "tokens",
       "title": "Text becomes tokens",
-      "text": "Models read numbers, not letters. A tokenizer splits text into chunks (roughly ¾ of a word each) and maps every chunk to an ID.",
+      "text": "Models read numbers, not letters. A tokenizer splits text into chunks and maps every chunk to an ID.",
       "payload": [
-        [
-          "pieces",
-          "[\"Explain\", \" web\", \"hooks\", \" in\", \" one\", …]",
-          "Common words are one token; rare ones split."
-        ],
-        [
-          "ids",
-          "[849, 3566, 39023, 304, 832, …]",
-          "What the model actually sees."
-        ],
-        [
-          "count",
-          "≈ 30 input tokens",
-          "Input tokens are what you pay for on the way in."
-        ]
-      ]
+        ["pieces", "[\"Explain\", \" web\", \"hooks\", \" in\", \" one\", …]", "Illustrative split. Common words are one token; rarer words break into pieces."],
+        ["ids", "[849, 3566, 39023, 304, 832, …]", "Illustrative IDs. Each provider's tokenizer has its own vocabulary."],
+        ["count", "≈ 30 input tokens", "Input tokens are billed and count toward the context window."]
+      ],
+      "depth": {
+        "beginner": "Computers do maths, not reading, so your words are chopped into small chunks called tokens. A token is often a whole common word like \"one\", or a piece of a rarer word: \"webhooks\" might become \"web\" and \"hooks\". Each chunk is swapped for a number from a fixed dictionary. In English, a token is roughly three-quarters of a word on average, so 100 tokens is about 75 words. Tokens are also how AI companies count and charge for usage.",
+        "practitioner": "A tokenizer (commonly a byte-pair-encoding variant) maps text to integer IDs from a fixed vocabulary. Token counts, not characters, determine price, latency and whether a prompt fits the context window. Ratios differ by language and content: code, numbers and non-English text often need more tokens per word. Use the provider's token-counting endpoint or library instead of guessing, because each model family has its own tokenizer and the same text can count differently.",
+        "expert": "Tokenizer changes between model generations can shift counts noticeably, so re-measure costs when you migrate models. Tokenization explains several quirks: weak character-level tasks like counting letters, odd behaviour on rare strings, and prompt-injection tricks that hide text in unusual Unicode. Images and audio are also converted into tokens by their own encoders and billed accordingly."
+      },
+      "walk": {
+        "why": "A vocabulary of tens of thousands of sub-word pieces can spell any text while keeping sequences short; one token per character would make every request several times longer and slower.",
+        "wrong": "Budgets estimated in words or characters are often wrong for code, tables or Urdu and other non-Latin scripts, which can need far more tokens. Teams then hit context limits or overspend.",
+        "example": "A team translating support tickets into several languages finds the same ticket costs noticeably more to process in some languages than in English, purely because of token counts."
+      }
     },
     {
-      "from": "model",
-      "to": "api",
-      "label": "next token…",
+      "from": "model", "to": "api", "label": "next token…",
       "title": "The model predicts one token at a time",
-      "text": "For each position it scores every possible next token, picks one (temperature controls how adventurous), appends it, and repeats until it decides to stop.",
+      "text": "For each position it scores every possible next token, picks one, appends it, and repeats until it decides to stop.",
       "payload": [
-        [
-          "candidates",
-          "\" A\" 0.62 · \" Web\" 0.21 · \" It\" 0.09",
-          "Probabilities for the very first output token."
-        ],
-        [
-          "temperature",
-          "0.7",
-          "0 = always the top choice, higher = more variety."
-        ],
-        [
-          "stop",
-          "end-of-turn token or max_tokens",
-          "The two ways a reply ends."
-        ]
-      ]
+        ["candidates", "\" A\" 0.62 · \" Web\" 0.21 · \" It\" 0.09", "Illustrative probabilities for the very first output token."],
+        ["sampling", "temperature / top-p", "How a token is picked from those probabilities. Some newer models fix these settings."],
+        ["stop", "end-of-turn, stop sequence or max_tokens", "The ways a reply can end. Your code should check which one happened."]
+      ],
+      "depth": {
+        "beginner": "The model now writes its answer one token at a time, like a very well-read autocomplete. For each next chunk it considers every possible token and gives each a likelihood: maybe \" A\" is most likely, \" Web\" less so. It picks one, adds it to the text, and repeats, each time looking at everything written so far. It stops when it decides the answer is complete, or when it reaches the length limit the app set.",
+        "practitioner": "Generation is autoregressive: each new token is predicted from the prompt plus all tokens generated so far. Sampling settings such as `temperature` and `top_p` control how adventurous the choice is; low values are more repeatable, higher values more varied. Several newer reasoning models fix or remove these parameters, so check model documentation. Output tokens usually cost more than input tokens and are generated sequentially, which is why long answers take longer.",
+        "expert": "Reasoning-capable models may spend extra output tokens thinking before the visible answer; you pay for them even if only a summary is shown. Latency splits into time-to-first-token (dominated by processing the prompt) and tokens per second. Stop sequences, length caps and structured-output modes all constrain this loop. Identical prompts can still produce different text, so tests should check properties rather than exact strings."
+      },
+      "walk": {
+        "why": "Predicting one token at a time lets a single model write anything, from a haiku to JSON, using the same mechanism. The context of everything so far is what keeps the answer coherent.",
+        "wrong": "Models can produce fluent text that is false (hallucination), because they choose likely words, not verified facts. Long outputs can also hit `max_tokens` and stop mid-sentence.",
+        "example": "Ask the same model the same question twice and you may get two differently worded answers; that variation comes from sampling at this step."
+      }
     },
     {
-      "from": "api",
-      "to": "app",
-      "label": "stream (SSE)",
+      "from": "api", "to": "app", "label": "stream (SSE)",
       "title": "Tokens stream back as they're made",
       "text": "That's why replies appear word by word. The API pushes small server-sent events instead of waiting for the full answer.",
       "payload": [
-        [
-          "event",
-          "content_block_delta",
-          "One small chunk of new text."
-        ],
-        [
-          "delta.text",
-          "\" A webhook is\"",
-          "Appended to what's already on screen."
-        ],
-        [
-          "stop_reason",
-          "\"end_turn\"",
-          "Sent last: the model finished on its own."
-        ],
-        [
-          "usage",
-          "{ input_tokens: 30, output_tokens: 24 }",
-          "What the request cost."
-        ]
-      ]
+        ["message_start", "{ usage: { input_tokens: 30 } }", "First event. Carries the message ID and the input token count."],
+        ["content_block_delta", "{ delta: { text: \" A webhook is\" } }", "One small chunk of new text, appended to what is already shown."],
+        ["message_delta", "{ stop_reason: \"end_turn\", usage: { output_tokens: 24 } }", "Near the end. Says why the reply stopped and how many tokens it produced."],
+        ["message_stop", "{ }", "Final event. The stream is complete."]
+      ],
+      "depth": {
+        "beginner": "Instead of waiting for the whole answer, the servers send it back in small pieces as they are written. That is why text appears word by word on your screen. It feels faster because you start reading after a moment instead of waiting several seconds. At the very end, the servers send a short note saying the answer is finished and how long it was, which is also what you are billed for.",
+        "practitioner": "Streaming uses server-sent events over the open HTTPS connection. In Anthropic's format the sequence is `message_start` (with input token usage), content blocks made of many `content_block_delta` events, then `message_delta` carrying `stop_reason` and output token usage, then `message_stop`. Check the stop reason: `end_turn` means the model finished; `max_tokens` means the answer was cut off and should be continued or retried with a higher limit.",
+        "expert": "Handle partial failure: streams can break mid-way, and errors can arrive as events after a successful HTTP 200. Buffer deltas so you never render half a multi-byte character or half a Markdown table. With tool use, argument JSON also streams in fragments and must be parsed only when complete. Ping or heartbeat events can appear and should be ignored. Record usage from the final events for cost tracking."
+      },
+      "walk": {
+        "why": "Time-to-first-token is far shorter than time-to-last-token. Streaming lets people start reading in well under a second even when the full answer takes ten.",
+        "wrong": "Code that only reads the text deltas never sees the stop reason, so truncated answers are shown as if complete. Dropped connections can leave a half-written reply that is then saved to history.",
+        "example": "Coding assistants stream code as it is written; a good one marks a reply that ended on `max_tokens` and offers to continue rather than presenting broken code as finished."
+      },
+      "providers": {
+        "anthropic": "Events: `message_start` → `content_block_start` → `content_block_delta`… → `content_block_stop` → `message_delta` (stop_reason, output usage) → `message_stop`.",
+        "openai": "Responses API streaming emits typed events such as `response.created`, `response.output_text.delta` for text chunks and `response.completed` at the end. If `max_output_tokens` is reached, the response status is `incomplete` with that reason.",
+        "gemini": "The Interactions API supports streaming with incremental events; the legacy generateContent API has a separate streamGenerateContent method."
+      }
     },
     {
-      "from": "app",
-      "to": "user",
-      "label": "answer",
+      "from": "app", "to": "user", "label": "answer",
       "title": "You read the answer",
       "text": "One request, one response. Everything an agent does is built from repeating this loop with extra context and tools.",
       "payload": [
-        [
-          "text",
-          "\"A webhook is a URL another app calls the moment something happens.\"",
-          "The final rendered message."
-        ]
-      ]
+        ["text", "\"A webhook is a URL another app calls the moment something happens.\"", "The final assembled reply shown to you."],
+        ["history", "[user, assistant]", "The app appends the reply so the next turn can be re-sent with full context."],
+        ["usage", "30 in · 24 out", "What this turn consumed. Apps record it for billing and limits."]
+      ],
+      "depth": {
+        "beginner": "The app shows you the finished answer and quietly saves it next to your question, so if you ask a follow-up, the whole conversation can be sent again. That is the entire trip: your words went out, were turned into numbers, the model predicted an answer piece by piece, and the pieces came back. Every AI agent you will meet in later lessons is built from this same basic round trip, repeated with extra information and tools.",
+        "practitioner": "After the stream completes, the client stores the assistant turn in history, records usage for metering, and renders the text (often as Markdown). This is the moment to apply output checks: render Markdown safely, never execute model output directly, and log the stop reason. The same request-response cycle, repeated with tool definitions and tool results, becomes the agent loop covered in the next lessons.",
+        "expert": "Sanitise rendered output: Markdown links and images in model output can be used to exfiltrate data if an attacker influences the conversation, so restrict remote images and unknown link targets. Persist the exact assistant content blocks you received, not a reformatted version, so later turns replay the conversation faithfully. Track per-user token usage to enforce quotas and detect abuse."
+      },
+      "walk": {
+        "why": "Saving the assistant reply into history is what makes a stateless model feel like a conversation partner.",
+        "wrong": "Rendering model output as raw HTML can let injected content run scripts in your page. Forgetting to save the reply makes the next turn incoherent.",
+        "example": "When you ask \"make it shorter\", the model knows what \"it\" refers to only because the app re-sent its previous answer as part of the history."
+      }
+    }
+  ],
+  "article": {
+    "promise": "In ten minutes you will know exactly what travels between a chat app and an AI model, and why it shapes cost, speed and reliability.",
+    "thirtySeconds": [
+      "A chat app sends your whole conversation to the model provider in one HTTPS request every turn; the model itself remembers nothing.",
+      "Text is converted to tokens, and the model writes its reply one token at a time by predicting the most likely next piece.",
+      "The reply streams back in small events; the last ones say why it stopped and how many tokens you paid for."
+    ],
+    "whyItMatters": "Every AI product, from a chatbot to an autonomous security agent, is built on this single round trip. If you understand what is in the request, how tokens are counted and how a reply ends, you can predict costs, explain why answers get cut off, keep secrets out of prompts and debug most \"the AI is acting weird\" reports. Later lessons add tools, memory and multiple agents, but they all repeat this loop.",
+    "analogy": "It is like posting a letter to a very fast expert who has no memory. Every time you write, you must include copies of all earlier letters so they know the context. They reply by dictating one word at a time, and you can start reading as soon as the first words arrive.",
+    "audience": "Anyone new to AI agents: students, product managers, security analysts and developers who have used chat apps but never looked under the hood.",
+    "minutes": 12,
+    "prerequisites": [],
+    "deepDives": [
+      {
+        "title": "Tokens and the context window",
+        "body": "A model can only look at a fixed number of tokens at once, called its context window. Everything counts: the system prompt, the whole history, any documents you paste and the reply being written. Large windows are now common, but bigger prompts are slower and cost more on every turn.\n\nThat is why serious apps trim, summarise or retrieve only the relevant parts of long material instead of pasting everything, a topic covered in the RAG and memory lessons."
+      },
+      {
+        "title": "Why the model forgets: stateless APIs",
+        "body": "Most LLM APIs are stateless: each request is independent and the server keeps no conversation for you. That design lets providers send any request to any machine, which is how they scale.\n\nThe cost is that your app must store and resend history. Some providers now offer optional server-side conversation state, which saves bandwidth but means the provider stores your data, so check retention settings before using it for sensitive work."
+      },
+      {
+        "title": "Stop reasons are part of the answer",
+        "body": "A reply can end because the model finished (`end_turn`), because it hit your `max_tokens` cap, because it produced a stop sequence you defined, or because it wants to call a tool (`tool_use`, next lesson). Newer models can also decline with a refusal stop reason.\n\nTreat the stop reason as data. A truncated answer that looks complete is a common source of broken code and wrong summaries."
+      }
+    ],
+    "production": [
+      {
+        "title": "Cost grows with conversation length",
+        "body": "Because history is re-sent each turn, a 40-turn chat pays for the early turns again and again. Use prompt caching for stable prefixes, summarise old turns, and set per-user limits."
+      },
+      {
+        "title": "Secrets and personal data in prompts",
+        "body": "Anything in the request may be logged by your app, your proxy or the provider under its retention policy. Redact API keys, passwords and unnecessary personal data before sending, and keep provider keys on your server, never in browser or mobile code."
+      },
+      {
+        "title": "Truncated or failed streams",
+        "body": "Streams can stop on `max_tokens` or drop mid-way on network errors. Always read the final events, mark incomplete answers, and retry idempotently instead of saving half a reply to history."
+      },
+      {
+        "title": "Latency budgets",
+        "body": "Users notice a slow first word more than a slow last word. Stream responses, keep prompts lean, and choose a smaller or faster model for simple tasks where quality allows."
+      }
+    ],
+    "lab": {
+      "title": "Read a streamed reply correctly",
+      "intro": "Write the code that assembles a streamed reply, records token usage, and refuses to treat a cut-off answer as finished. The lab uses a recorded fake stream, so it runs without an API key; swap in a real provider stream later.",
+      "dir": "labs/llm-call"
+    },
+    "takeaways": [
+      "The model is stateless; your app re-sends the whole conversation every turn.",
+      "Tokens, not words, determine price, speed and whether a prompt fits the context window.",
+      "Replies are generated one token at a time, which is why they can stream and why they can vary.",
+      "Always check the stop reason: `max_tokens` means the answer was cut off.",
+      "Keep API keys on your server and treat everything in a prompt as potentially logged."
+    ],
+    "faq": [
+      { "q": "Does the AI remember my previous chats?", "a": "Not by itself. The model only sees what the app sends in each request. Apps with a memory feature store notes separately and paste relevant ones back into later conversations." },
+      { "q": "Why does the same question give different answers?", "a": "The model samples each next token from a probability distribution, so wording can change between runs. Lower randomness settings, where a model supports them, make answers more repeatable but never guarantee identical text." },
+      { "q": "How many words is a token?", "a": "In English, a common rule of thumb is about three-quarters of a word per token, so 100 tokens is roughly 75 words. Code, numbers and many other languages use more tokens per word, and each model family has its own tokenizer." },
+      { "q": "Why did the answer stop in the middle of a sentence?", "a": "Usually because it hit the `max_tokens` limit the app set. Well-built apps check the stop reason and offer to continue." }
+    ],
+    "related": ["tool-use", "agent-loop", "memory"]
+  },
+  "quiz": [
+    {
+      "q": "You ask a follow-up question in an existing chat. What does the app send to the model?",
+      "options": ["Only your new message", "Your new message plus the whole conversation so far", "A session ID the model uses to look up history", "Only the model's last answer"],
+      "answer": 1,
+      "explain": "The API is stateless, so the app re-sends the full history each turn. That is also why long chats cost more per message."
+    },
+    {
+      "q": "A reply ends with stop reason `max_tokens`. What does that mean?",
+      "options": ["The model finished normally", "The answer was cut off at the length limit", "The model wants to call a tool", "The request was blocked"],
+      "answer": 1,
+      "explain": "`max_tokens` means the output cap was reached. The text is incomplete and should be continued or regenerated with a higher limit."
+    },
+    {
+      "q": "Why can the same prompt produce two different answers?",
+      "options": ["The model looks up random web pages", "Each next token is sampled from probabilities", "The servers are out of sync", "Tokens are assigned randomly"],
+      "answer": 1,
+      "explain": "Generation picks each token from a probability distribution. Different picks early on lead to different wording later."
+    },
+    {
+      "q": "Where should the API key live in a browser-based chat app?",
+      "options": ["In the JavaScript bundle", "In the user's local storage", "On your own server, which forwards requests", "In the system prompt"],
+      "answer": 2,
+      "explain": "Anything shipped to the browser can be read by users. Keep the key on a backend that adds it to provider requests."
     }
   ]
 }

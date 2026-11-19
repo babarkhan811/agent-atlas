@@ -6,9 +6,13 @@ import type { Lesson } from "@/content/schema";
 import { Diagram } from "@/sim/Diagram";
 import { Sequence } from "@/sim/Sequence";
 import { KIND_INFO, approxBytes, fmtSeconds, stepTimes } from "@/sim/layout";
+import { GOTO_EVENT } from "./ArticleWidgets";
+import { Prose } from "./Prose";
 import { CATS, Shell, catInfo } from "./Shell";
 
 type View = "diagram" | "sequence";
+export type Depth = "beginner" | "practitioner" | "expert";
+const DEPTHS: [Depth, string][] = [["beginner", "Beginner"], ["practitioner", "Practitioner"], ["expert", "Expert"]];
 type Props = { lesson: Lesson; index: LessonIndexItem[] };
 
 const TRACE_TYPES = ["LLM", "TOOL", "DATA", "API", "AGENT", "POLICY", "HUMAN"] as const;
@@ -26,6 +30,8 @@ export function Workspace({ lesson, index }: Props) {
   const [view, setView] = useState<View>("diagram");
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  const [depth, setDepth] = useState<Depth>("practitioner");
+  const hasDepth = lesson.steps.every((x) => x.depth);
   const ready = useRef(false);
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
   const traceScroll = useRef<HTMLDivElement>(null);
@@ -39,6 +45,8 @@ export function Workspace({ lesson, index }: Props) {
     const s = parseInt(p.get("step") ?? "", 10);
     if (s > 0) setStep(s - 1);
     if (p.get("view") === "sequence") setView("sequence");
+    const d = p.get("depth");
+    if (d === "beginner" || d === "expert") setDepth(d);
     ready.current = true;
   }, [setStep]);
   useEffect(() => {
@@ -46,8 +54,16 @@ export function Workspace({ lesson, index }: Props) {
     const u = new URL(location.href);
     u.searchParams.set("step", String(step + 1));
     if (view === "sequence") u.searchParams.set("view", "sequence"); else u.searchParams.delete("view");
+    if (hasDepth && depth !== "practitioner") u.searchParams.set("depth", depth); else u.searchParams.delete("depth");
     history.replaceState(history.state, "", u);
-  }, [step, view]);
+  }, [step, view, depth, hasDepth]);
+
+  // "Show step N" buttons in the article below drive the simulation.
+  useEffect(() => {
+    const onGoto = (e: Event) => go((e as CustomEvent<number>).detail);
+    window.addEventListener(GOTO_EVENT, onGoto);
+    return () => window.removeEventListener(GOTO_EVENT, onGoto);
+  }, [go]);
 
   useEffect(() => {
     if (!playing) return;
@@ -142,7 +158,8 @@ export function Workspace({ lesson, index }: Props) {
         <h2 className="panel-title">LESSON OVERVIEW</h2>
         <div className="ov">
           <div className="ov-top"><h2>{lesson.title}</h2><span className="badge sim" title="An illustrative simulation, not live traffic">SIMULATION</span></div>
-          <p className="ov-sum">{lesson.summary}</p>
+          <p className="ov-sum">{lesson.article?.promise ?? lesson.summary}</p>
+          {lesson.article && <p className="ov-read"><a href="#overview">Read the full guide below ↓</a> · ~{lesson.article.minutes} min</p>}
           <div className="stats">
             <div><small>LAYER</small><b>{layer}</b><span>{catInfo(lesson.category)[2]}</span></div>
             <div><small>MESSAGES</small><b>{n}</b><span>hops</span></div>
@@ -152,7 +169,17 @@ export function Workspace({ lesson, index }: Props) {
             {lesson.nodes.map((x) => <span key={x.id} className="chip" style={{ ["--c" as string]: `var(--k-${x.kind})` }}>{x.label}</span>)}
           </div>
         </div>
-        <h2 className="panel-title sub">DECODED MESSAGE</h2>
+        <div className="msg-bar">
+          <h2 className="panel-title sub">DECODED MESSAGE</h2>
+          {hasDepth && (
+            <div className="depth" role="radiogroup" aria-label="Explanation depth">
+              {DEPTHS.map(([d, label]) => (
+                <button key={d} type="button" role="radio" aria-checked={depth === d} className={depth === d ? "on" : ""}
+                  onClick={() => setDepth(d)}>{label}</button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="msg" id="decoded-msg">
           <div className="msg-no">MSG {pad(step + 1)} / {pad(n)}
             <span className="type" style={{ ["--c" as string]: `var(--k-${B.kind})` }}>{KIND_INFO[B.kind].tag}</span>
@@ -163,7 +190,10 @@ export function Workspace({ lesson, index }: Props) {
             <span className="chip" style={{ ["--c" as string]: `var(--k-${B.kind})` }}>{B.label}</span>
           </div>
           <h3>{s.title}</h3>
-          {s.text && <p>{s.text}</p>}
+          {s.depth ? <div className="narr"><Prose text={s.depth[depth]} /></div> : s.text && <p>{s.text}</p>}
+          {depth === "beginner" && hasDepth ? (
+            <p className="hint">Switch to <button type="button" className="linkish" onClick={() => setDepth("practitioner")}>Practitioner</button> to see every field in this message.</p>
+          ) : (<>
           <div className="fields">
             <div className="fields-h">{s.label}</div>
             {s.payload.map(([k, v, note]) => (
@@ -180,6 +210,14 @@ export function Workspace({ lesson, index }: Props) {
               <span key={k}>  <span className="jk">&quot;{k}&quot;</span>: <span className="jv">{v}</span>{j < raw.length - 1 ? ",\n" : "\n"}</span>
             ))}{"}"}</pre>
           </details>
+          {depth === "expert" && s.providers && (
+            <div className="providers">
+              <div className="fields-h">SAME STEP, OTHER PROVIDERS</div>
+              {([["anthropic", "Anthropic"], ["openai", "OpenAI"], ["gemini", "Google Gemini"]] as const).map(([k, name]) =>
+                s.providers?.[k] ? <div className="f" key={k}><div className="fk">{name}</div><div className="fn"><Prose text={s.providers[k]!} /></div></div> : null)}
+            </div>
+          )}
+          </>)}
         </div>
         <div className="pager">
           {prev ? <Link href={prev.href}>‹ {prev.title}</Link> : <span />}
