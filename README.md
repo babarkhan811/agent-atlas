@@ -1,6 +1,6 @@
 # Agent Atlas
 
-Interactive, step-by-step lessons on how AI agents work: LLM calls, tool use, the agent loop, RAG, memory, MCP, multi-agent teams, computer use, workflow automation, AI-powered cybersecurity (SOC triage, phishing analysis, vulnerability fixing, incident response), safety guardrails and evals.
+Interactive, step-by-step lessons on how AI agents work: LLM calls, tool use, the agent loop, RAG, memory, MCP, multi-agent teams, computer use, workflow automation, cybersecurity automation (SOC triage, SOAR playbooks, phishing analysis, vulnerability fixing, cloud misconfiguration fixes, access reviews, threat hunting, incident response), safety guardrails and evals.
 
 Each lesson animates messages between components and decodes every request field by field.
 

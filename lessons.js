@@ -835,7 +835,7 @@ window.LESSONS = [
 
   {
     id: "soc-triage",
-    category: "Cybersecurity",
+    category: "Cybersecurity automation",
     title: "AI alert triage in the SOC",
     summary: "Security teams drown in alerts. An agent gathers evidence for each one so analysts only see what matters.",
     nodes: [
@@ -901,7 +901,7 @@ window.LESSONS = [
 
   {
     id: "phishing",
-    category: "Cybersecurity",
+    category: "Cybersecurity automation",
     title: "Automated phishing analysis",
     summary: "Employees report suspicious emails; an AI pipeline checks every one in seconds.",
     nodes: [
@@ -960,7 +960,7 @@ window.LESSONS = [
 
   {
     id: "vuln-patch",
-    category: "Cybersecurity",
+    category: "Cybersecurity automation",
     title: "Vulnerability fixing agent",
     summary: "From a new CVE to a tested pull request, with a developer reviewing before merge.",
     nodes: [
@@ -1019,7 +1019,7 @@ window.LESSONS = [
 
   {
     id: "incident-response",
-    category: "Cybersecurity",
+    category: "Cybersecurity automation",
     title: "Incident response with an AI co-pilot",
     summary: "During an attack, an agent follows the playbook, runs the investigation and keeps the timeline while people make the calls.",
     nodes: [
@@ -1074,6 +1074,264 @@ window.LESSONS = [
       },
     ],
   },
+
+  {
+    id: "soar-playbook",
+    category: "Cybersecurity automation",
+    title: "Security playbooks on autopilot (SOAR)",
+    summary: "Routine threats get handled end to end in seconds: safe steps run automatically, risky ones wait for a person.",
+    nodes: [
+      { id: "edr", label: "EDR alert", kind: "external", x: 9, y: 50 },
+      { id: "soar", label: "SOAR engine", kind: "app", x: 38, y: 50 },
+      { id: "intel", label: "Hash reputation", kind: "tool", x: 68, y: 12 },
+      { id: "llm", label: "AI decision step", kind: "model", x: 90, y: 50 },
+      { id: "ticket", label: "Ticket + chat", kind: "data", x: 68, y: 88 },
+    ],
+    steps: [
+      {
+        from: "edr", to: "soar", label: "malware detected",
+        title: "Trigger",
+        text: "A playbook starts automatically for every alert of this type. Same steps every time, no matter if it's 3 a.m.",
+        payload: [
+          ["alert", "\"Malicious file written to disk\"", ""],
+          ["file", "invoice_scan.exe", ""],
+          ["sha256", "9f2c…e81a", "A fingerprint of the file."],
+          ["host", "HR-PC-07", ""],
+        ],
+      },
+      {
+        from: "soar", to: "intel", label: "lookup hash",
+        title: "Enrich automatically",
+        text: "Read-only lookups are always safe to automate.",
+        payload: [
+          ["verdict", "malicious · 54/70 engines", ""],
+          ["family", "info-stealer", "Steals saved passwords and browser cookies."],
+        ],
+      },
+      {
+        from: "soar", to: "llm", label: "decide",
+        title: "AI handles the judgement call",
+        text: "Fixed rules cover the clear cases. The AI step reads the full context and picks a path from a fixed list, so it can't invent new actions.",
+        payload: [
+          ["allowed paths", "auto_contain · escalate · close_benign", "The model chooses; it can't add options."],
+          ["choice", "auto_contain", ""],
+          ["why", "\"Known stealer, file not yet executed, single host\"", "Logged for the audit trail."],
+        ],
+      },
+      {
+        from: "soar", to: "edr", label: "quarantine file",
+        title: "Safe action: done automatically",
+        text: "Quarantining one file is low-risk and easily undone, so it runs without waiting. Isolating a whole machine or a server would need approval.",
+        payload: [
+          ["action", "quarantine invoice_scan.exe", ""],
+          ["also", "block hash across all endpoints", "One detection protects every machine."],
+          ["undo", "restore from quarantine", "Reversible actions are the best candidates for automation."],
+        ],
+      },
+      {
+        from: "soar", to: "ticket", label: "ticket + notify",
+        title: "Close the loop",
+        text: "A ticket records everything and the team is told what was done, so humans stay in charge without doing the busywork.",
+        payload: [
+          ["ticket", "SEC-1932 · contained automatically", ""],
+          ["message", "\"Info-stealer quarantined on HR-PC-07, no execution seen\"", ""],
+          ["time", "38 seconds end to end", "vs ~30 minutes by hand."],
+        ],
+      },
+    ],
+  },
+
+  {
+    id: "cloud-remediation",
+    category: "Cybersecurity automation",
+    title: "Auto-fixing cloud misconfigurations",
+    summary: "Most cloud breaches start with a setting left open. An agent finds them and fixes them the safe way: in code.",
+    nodes: [
+      { id: "scan", label: "Cloud scanner", kind: "tool", x: 9, y: 50 },
+      { id: "agent", label: "Remediation agent", kind: "app", x: 38, y: 50 },
+      { id: "cloud", label: "Cloud account", kind: "external", x: 68, y: 12 },
+      { id: "repo", label: "Infra code repo", kind: "data", x: 90, y: 50 },
+      { id: "owner", label: "Resource owner", kind: "user", x: 68, y: 88 },
+    ],
+    steps: [
+      {
+        from: "scan", to: "agent", label: "finding",
+        title: "The scanner flags a risky setting",
+        text: "Security posture tools check every cloud resource against best-practice rules, continuously.",
+        payload: [
+          ["resource", "storage bucket \"customer-exports\"", ""],
+          ["issue", "publicly readable", "Anyone with the link can download the files."],
+          ["severity", "critical", ""],
+        ],
+      },
+      {
+        from: "agent", to: "cloud", label: "inspect",
+        title: "Check context before acting",
+        text: "Not every public bucket is a mistake; website assets are meant to be public. The agent checks tags, contents and recent access first.",
+        payload: [
+          ["tags", "{ team: \"data\", env: \"prod\" }", ""],
+          ["contents", "CSV files named orders_*.csv", "Looks like customer data, not website files."],
+          ["public reads", "0 in the last 30 days", "Probably not exposed yet."],
+        ],
+      },
+      {
+        from: "agent", to: "repo", label: "pull request",
+        title: "Fix it in code, not by clicking",
+        text: "If you fix the live setting only, the next deploy puts the old one back. The agent changes the infrastructure-as-code file so the fix sticks.",
+        payload: [
+          ["file", "infra/storage.tf", ""],
+          ["change", "public_access = false", ""],
+          ["policy", "non-prod: auto-merge · prod: owner approval", "Riskier environments get a human."],
+        ],
+      },
+      {
+        from: "agent", to: "owner", label: "please approve",
+        title: "Ask the right person",
+        text: "The owner tag tells the agent exactly who to ask, so it doesn't go to a busy central security queue.",
+        payload: [["message", "\"customer-exports is public and holds order data. Approve the PR to close it?\"", ""]],
+      },
+      {
+        from: "repo", to: "cloud", label: "deploy",
+        title: "Merged, deployed, verified",
+        text: "After deployment the scanner checks again to confirm the finding is really gone.",
+        payload: [
+          ["status", "resolved · re-scan clean", ""],
+          ["time open", "47 minutes", "Industry average is often weeks."],
+        ],
+      },
+    ],
+  },
+
+  {
+    id: "access-review",
+    category: "Cybersecurity automation",
+    title: "Automated access reviews",
+    summary: "Leavers and unused admin rights are a favourite way in for attackers. An agent does the quarterly review in an afternoon.",
+    nodes: [
+      { id: "idp", label: "Identity provider", kind: "tool", x: 9, y: 22 },
+      { id: "hr", label: "HR system", kind: "data", x: 9, y: 78 },
+      { id: "agent", label: "Review agent", kind: "app", x: 42, y: 50 },
+      { id: "manager", label: "Managers", kind: "user", x: 78, y: 18 },
+      { id: "audit", label: "Audit evidence", kind: "data", x: 78, y: 82 },
+    ],
+    steps: [
+      {
+        from: "idp", to: "agent", label: "all accounts",
+        title: "Collect who has access to what",
+        text: "",
+        payload: [
+          ["accounts", "1,240", ""],
+          ["apps", "86", ""],
+          ["admin grants", "312", "Each one is a big target."],
+        ],
+      },
+      {
+        from: "hr", to: "agent", label: "staff list",
+        title: "Compare with who actually works here",
+        text: "Matching against HR data shows people who left or changed teams but kept their access.",
+        payload: [
+          ["leavers", "14 still active", "Should have been switched off on their last day."],
+          ["team changes", "37", ""],
+        ],
+      },
+      {
+        from: "agent", to: "manager", label: "review list",
+        title: "AI flags what looks wrong",
+        text: "Instead of a 1,240-row spreadsheet, each manager gets a short list with a reason for each item.",
+        payload: [
+          ["flag", "j.lee: admin on billing, unused 140 days", "Unused admin = remove."],
+          ["flag", "m.ali: moved Sales → HR, still has CRM admin", "Role mismatch."],
+          ["to review", "61 items (was 1,240 rows)", ""],
+        ],
+      },
+      {
+        from: "manager", to: "agent", label: "decisions",
+        title: "Managers confirm",
+        text: "People keep the final say because they know context the data doesn't, like a contractor coming back next month.",
+        payload: [
+          ["revoke", "52", ""],
+          ["keep", "9 (with reason)", ""],
+        ],
+      },
+      {
+        from: "agent", to: "idp", label: "revoke",
+        title: "Apply the changes",
+        text: "",
+        payload: [["revoked", "52 grants · 14 accounts disabled", ""]],
+      },
+      {
+        from: "agent", to: "audit", label: "evidence pack",
+        title: "Proof for auditors",
+        text: "Standards like SOC 2 and ISO 27001 require regular access reviews. The agent saves who decided what and when.",
+        payload: [
+          ["contents", "before/after lists · approvals · timestamps", ""],
+          ["effort", "1 afternoon (was ~2 weeks)", ""],
+        ],
+      },
+    ],
+  },
+
+  {
+    id: "threat-hunting",
+    category: "Cybersecurity automation",
+    title: "Threat hunting with AI",
+    summary: "Ask a question in plain English; the agent writes the log queries, spots the pattern and turns it into a permanent detection.",
+    nodes: [
+      { id: "analyst", label: "Analyst", kind: "user", x: 9, y: 50 },
+      { id: "agent", label: "Hunting agent", kind: "app", x: 38, y: 50 },
+      { id: "model", label: "Model", kind: "model", x: 68, y: 12 },
+      { id: "logs", label: "Network logs", kind: "data", x: 90, y: 50 },
+      { id: "rules", label: "Detection rules", kind: "guard", x: 68, y: 88 },
+    ],
+    steps: [
+      {
+        from: "analyst", to: "agent", label: "hypothesis",
+        title: "Start from a hunch",
+        text: "Hunting means looking for attackers that no alert has caught yet.",
+        payload: [["question", "\"Is any machine quietly phoning home on a regular timer?\"", "Malware often checks in with its controller at fixed intervals (beaconing)."]],
+      },
+      {
+        from: "agent", to: "model", label: "write query",
+        title: "Plain English → log query",
+        text: "The model writes the query in the log tool's language. The agent only has read access to logs, so a bad query can't break anything.",
+        payload: [["query", "connections | group by host, dest | where interval_stddev < 2s and count > 500", "Very regular timing is suspicious; humans and browsers are irregular."]],
+      },
+      {
+        from: "agent", to: "logs", label: "run (read-only)",
+        title: "Search 7 days of traffic",
+        text: "",
+        payload: [
+          ["scanned", "2.1 billion connections", ""],
+          ["matches", "9 host/destination pairs", ""],
+        ],
+      },
+      {
+        from: "logs", to: "agent", label: "9 matches",
+        title: "Separate signal from noise",
+        text: "The agent checks each match: 8 are known update services and monitoring tools. One isn't.",
+        payload: [
+          ["suspicious", "DEV-SRV-03 → 198.51.100.23 every 60s", ""],
+          ["domain age", "9 days", ""],
+          ["benign", "8 (update checks, monitoring)", "Added to an allowlist so they don't show up again."],
+        ],
+      },
+      {
+        from: "agent", to: "analyst", label: "finding",
+        title: "Hand over to incident response",
+        text: "The analyst confirms and opens an incident; from here the incident response lesson takes over.",
+        payload: [["evidence", "timing chart · process name · first seen", ""]],
+      },
+      {
+        from: "agent", to: "rules", label: "new detection",
+        title: "Make it permanent",
+        text: "A one-off hunt becomes an always-on rule. The agent tests it on 30 days of past data first to check it won't flood the team with false alarms.",
+        payload: [
+          ["rule", "\"Regular beaconing to new domain\"", ""],
+          ["backtest", "1 true hit · 2 false alarms / month", "Acceptable noise level."],
+        ],
+      },
+    ],
+  },
 ];
 
 window.GLOSSARY = [
@@ -1102,4 +1360,9 @@ window.GLOSSARY = [
   ["IOC", "Indicator of compromise: a known-bad domain, IP or file hash."],
   ["CVE", "A public ID for a known software vulnerability."],
   ["MITRE ATT&CK", "A catalogue of attacker techniques used to describe what an attack did."],
+  ["Playbook", "A written set of response steps that automation can run the same way every time."],
+  ["Infrastructure as code", "Cloud setup written in files, so changes are reviewed and repeatable."],
+  ["Beaconing", "Malware checking in with its controller at regular intervals."],
+  ["Detection rule", "A saved search that raises an alert whenever a pattern appears."],
+  ["Least privilege", "Give each person or agent only the access the task needs."],
 ];

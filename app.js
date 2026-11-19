@@ -1,6 +1,6 @@
 (() => {
   const LESSONS = window.LESSONS;
-  const CATEGORIES = ["Foundations", "Agents", "Knowledge", "Protocols", "Automation", "Cybersecurity", "Safety", "Production"];
+  const CATEGORIES = ["Foundations", "Agents", "Knowledge", "Protocols", "Automation", "Cybersecurity automation", "Safety", "Production"];
   const KINDS = { user: "Person", app: "App / runtime", model: "AI model", tool: "Tool", data: "Data", external: "External", guard: "Guardrail" };
   const W = 1000, H = 540, NW = 170, NH = 64;
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -30,7 +30,7 @@
       <section class="hero">
         <div class="eyebrow">Interactive lessons</div>
         <h1>Watch AI agents work, one message at a time.</h1>
-        <p>Step through how LLMs, tools, RAG, MCP, multi-agent teams, automations and AI security defences actually talk to each other, with every request decoded field by field.</p>
+        <p>Step through how LLMs, tools, RAG, MCP, multi-agent teams, automations and AI-driven cybersecurity actually talk to each other, with every request decoded field by field.</p>
         <a class="cta" href="#/${LESSONS[0].id}">Start with the basics →</a>
       </section>
       <div class="legend">${legend}</div>
