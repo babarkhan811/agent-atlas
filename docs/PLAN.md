@@ -24,7 +24,7 @@ Next.js (App Router) + TypeScript, content as JSON validated by Zod, Vitest + Pl
 
 | # | Milestone | Status |
 |---|---|---|
-| M1 | Next.js foundation, content migration + schema, real URLs, `<Simulation />` port, CI, Pages deploy | in progress |
+| M1 | Next.js foundation, content migration + schema, real URLs, `<Simulation />` port, CI, Pages deploy | **done** (tag `m1`, 2026-11-19) |
 | M2 | Bugs 1–12 and accessibility fixes, each with a regression test; axe 0 serious/critical | todo |
 | M3 | Landing page with live-sim hero, design tokens, purpose-built mobile layout, Lighthouse ≥ 95 | todo |
 | M4 | Learning paths, lesson template, quizzes, progress, full-content search, timeline scrubber, node inspector | todo |
