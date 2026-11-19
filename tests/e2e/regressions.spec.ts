@@ -117,3 +117,21 @@ test("bug 12: tighter autoplay pacing and a draggable timeline", async ({ page }
   await page.getByRole("slider", { name: "Timeline" }).fill("5");
   await expect(page.locator(".msg-no")).toContainText("MSG 05");
 });
+
+test("layout: short laptop screens (1280x560 viewport) keep the diagram visible", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 560 });
+  await page.goto("/learn/security/soc-triage/?step=2");
+  const diagram = await page.locator("svg.diagram").boundingBox();
+  const caption = await page.locator(".caption").boundingBox();
+  expect(diagram!.height).toBeGreaterThanOrEqual(280);
+  expect(caption!.y).toBeGreaterThanOrEqual(diagram!.y + diagram!.height - 2); // caption sits below, not on top
+  await page.locator(".trace").scrollIntoViewIfNeeded();
+  await expect(page.getByRole("button", { name: "▶ PLAY" })).toBeInViewport();
+});
+
+test("layout: opening a lesson does not scroll the page", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 560 });
+  await page.goto("/learn/security/access-review/?step=3");
+  await page.waitForTimeout(800);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});

@@ -57,15 +57,17 @@ body {
     var(--bg);
   color: var(--text);
   font: 14px/1.5 var(--font-sans), system-ui, sans-serif;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 a { color: inherit; }
 button, select, input { font: inherit; color: inherit; }
 code, kbd, pre { font-family: var(--font-mono), ui-monospace, monospace; }
 
 /* ---------- shell ---------- */
+/* The simulation needs ~520px of height. On short screens (e.g. 1280x720 laptops at 150%
+   scaling) the page grows and scrolls instead of squeezing the diagram to nothing. */
 .shell {
-  height: 100vh;
+  height: max(100vh, 860px);
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 360px;
   grid-template-rows: 68px minmax(0, 1fr) 236px;
@@ -184,6 +186,8 @@ code, kbd, pre { font-family: var(--font-mono), ui-monospace, monospace; }
 
 /* ---------- stage ---------- */
 .stage { display: flex; flex-direction: column; overflow: hidden; }
+.stage-body { min-height: 300px; }
+.shell.pagemode { height: 100vh; }
 .stage-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px 12px 18px; border-bottom: 1px solid var(--line); }
 .seg-toggle { display: flex; border: 1px solid var(--line-2); border-radius: 5px; padding: 2px; background: var(--bg-2); }
 .seg-toggle button {
@@ -199,7 +203,7 @@ code, kbd, pre { font-family: var(--font-mono), ui-monospace, monospace; }
 .eyebrow { font: 600 11px var(--font-mono), monospace; letter-spacing: .2em; color: var(--accent); }
 .stage-head h1 { margin: 4px 0 0; font: 700 21px/1.15 var(--font-sans), sans-serif; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stage-body { flex: 1; min-height: 0; position: relative; }
-.stage-body.diagram { display: grid; place-items: center; padding: 4px 6px 0; }
+.stage-body.diagram { display: grid; place-items: center; padding: 0 6px; }
 .stage-body.sequence { overflow-y: auto; overflow-x: hidden; padding: 0 0 16px; }
 svg.diagram { width: 100%; height: 100%; display: block; overflow: visible; }
 .gridline { fill: none; stroke: var(--grid); stroke-width: 1; }

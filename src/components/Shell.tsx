@@ -61,7 +61,14 @@ export function Shell({ index, active, step = 0, onStep, pageMode = false, child
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
-  useEffect(() => { activeLink.current?.scrollIntoView({ block: "nearest" }); }, [active?.id, filter]);
+  // Scroll only the lesson list (never the page) so the active lesson is visible.
+  useEffect(() => {
+    const link = activeLink.current, list = link?.closest(".list");
+    if (!link || !list) return;
+    const top = link.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
+    if (top < list.scrollTop || top + link.offsetHeight > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 3);
+  }, [active?.id, filter]);
 
   // Until the full-text index arrives, fall back to titles and summaries.
   const hits = new Map<string, LessonHit>(
