@@ -834,6 +834,88 @@ window.LESSONS = [
   },
 
   {
+    id: "software-plus-ai-agents",
+    category: "Cybersecurity automation",
+    title: "Software agents + AI agents working together",
+    summary: "Small programs on every machine are the eyes and hands. The AI agent is the brain that decides what to look at and what to do.",
+    nodes: [
+      { id: "laptop", label: "Laptop agent", kind: "tool", x: 9, y: 20 },
+      { id: "server", label: "Server agent", kind: "tool", x: 9, y: 80 },
+      { id: "siem", label: "SIEM", kind: "data", x: 36, y: 50 },
+      { id: "ai", label: "AI security agent", kind: "app", x: 66, y: 50 },
+      { id: "analyst", label: "Analyst", kind: "user", x: 90, y: 15 },
+      { id: "guard", label: "Approval gate", kind: "guard", x: 90, y: 85 },
+    ],
+    steps: [
+      {
+        from: "laptop", to: "siem", label: "telemetry",
+        title: "Software agents watch every machine",
+        text: "A software agent is a small program installed on each laptop and server (EDR, osquery, a Wazuh agent). It records what happens and sends it to the SIEM. It doesn't think; it observes and obeys.",
+        payload: [
+          ["event", "process_start", ""],
+          ["process", "rundll32.exe", ""],
+          ["parent", "outlook.exe", "Email software starting system tools is unusual."],
+          ["host", "SALES-LT-14", ""],
+        ],
+      },
+      {
+        from: "server", to: "siem", label: "logs",
+        title: "…and every server",
+        text: "Servers, firewalls and cloud accounts send logs too. The SIEM stores everything in one searchable place.",
+        payload: [["volume", "≈ 40 million events / day", "Far too many for humans to read; that's why automation is needed."]],
+      },
+      {
+        from: "siem", to: "ai", label: "alert",
+        title: "A rule matches and hands off to the AI agent",
+        text: "Detection rules turn raw events into alerts. Instead of landing in a human queue, the alert goes to the AI agent first.",
+        payload: [["rule", "\"Office app spawned a system binary\"", ""]],
+      },
+      {
+        from: "ai", to: "laptop", label: "live query",
+        title: "The AI asks the machine follow-up questions",
+        text: "This is where the two kinds of agent meet: the AI decides what it needs to know, and the software agent runs the query on the real machine.",
+        payload: [
+          ["query", "SELECT pid, name, cmdline FROM processes WHERE parent = 'outlook.exe'", "An osquery-style read-only question."],
+          ["permission", "read", "Read-only queries can run without approval."],
+        ],
+      },
+      {
+        from: "laptop", to: "ai", label: "results",
+        title: "Evidence comes back",
+        text: "",
+        payload: [
+          ["cmdline", "rundll32.exe C:\\Users\\…\\AppData\\Temp\\x.dll,Start", "Running a DLL from a temp folder is a classic malware trick."],
+          ["network", "connected to 203.0.113.77:443", ""],
+        ],
+      },
+      {
+        from: "ai", to: "analyst", label: "verdict + plan",
+        title: "The AI explains and proposes",
+        text: "The AI writes up what happened, how confident it is, and what it wants to do, but it can't run disruptive actions on its own.",
+        payload: [
+          ["verdict", "malicious · confidence 0.9", ""],
+          ["proposal", "kill process · isolate SALES-LT-14 · block 203.0.113.77", ""],
+        ],
+      },
+      {
+        from: "analyst", to: "guard", label: "approve",
+        title: "A person approves",
+        text: "",
+        payload: [["decision", "approved by on-call analyst", ""]],
+      },
+      {
+        from: "guard", to: "laptop", label: "isolate",
+        title: "The software agent carries it out",
+        text: "The same small program that collected the data now enforces the decision: it kills the process and cuts the laptop off the network, while keeping a line open to the security team.",
+        payload: [
+          ["actions", "process killed · host isolated", ""],
+          ["time", "6 minutes from alert to containment", ""],
+        ],
+      },
+    ],
+  },
+
+  {
     id: "soc-triage",
     category: "Cybersecurity automation",
     title: "AI alert triage in the SOC",

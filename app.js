@@ -24,7 +24,8 @@
     const cats = CATEGORIES.map((c) => {
       const items = LESSONS.filter((l) => l.category === c);
       if (!items.length) return "";
-      return `<section class="cat"><h2>${c}</h2><div class="grid">${items.map(card).join("")}</div></section>`;
+      const extra = c === "Cybersecurity automation" ? guideCard : "";
+      return `<section class="cat"><h2>${c}</h2><div class="grid">${extra}${items.map(card).join("")}</div></section>`;
     }).join("");
     app.innerHTML = `
       <section class="hero">
@@ -44,6 +45,21 @@
       <div class="chips">${kinds.map((k) => `<i class="dot" style="background:var(--k-${k})"></i>`).join("")}</div>
       <h3>${esc(l.title)}</h3><p>${esc(l.summary)}</p>
       <span class="meta">${l.steps.length} steps →</span></a>`;
+  }
+
+  const guideCard = `<a class="card featured" href="#/guide">
+      <div class="chips"><i class="dot" style="background:var(--k-guard)"></i><i class="dot" style="background:var(--k-tool)"></i><i class="dot" style="background:var(--k-app)"></i></div>
+      <h3>Build guide: automate cybersecurity with software agents and AI</h3>
+      <p>Automation ladder, architecture, step-by-step plan, tools, example code and safeguards.</p>
+      <span class="meta">Read the guide →</span></a>`;
+
+  function guide() {
+    app.innerHTML = window.GUIDE_HTML;
+    app.querySelectorAll("[data-jump]").forEach((a) => (a.onclick = (e) => {
+      e.preventDefault();
+      document.getElementById(a.dataset.jump).scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+    }));
+    document.title = "Build guide · Agent Atlas";
   }
 
   function glossary() {
@@ -168,6 +184,7 @@
     const l = LESSONS.find((x) => x.id === id);
     if (l) lesson(l, (parseInt(step, 10) || 1) - 1);
     else if (id === "glossary") glossary();
+    else if (id === "guide") guide();
     else home();
     if (!step || !l) scrollTo(0, 0);
   }
