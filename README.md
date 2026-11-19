@@ -4,7 +4,7 @@ Interactive, step-by-step lessons on how AI agents work: LLM calls, tool use, th
 
 There is also a build guide (`#/guide`) on automating cybersecurity with software agents and AI: automation ladder, architecture, step-by-step plan, tools, example code, safeguards and metrics.
 
-Each lesson animates messages between components and decodes every request field by field.
+Each lesson is an animated simulation: 3D-style components, glowing messages moving between them, a network view and a sequence view, a live message trace, and a decoded-message inspector. Keyboard: ← → to step, Space to play, Ctrl K to search.
 
 **Live site:** https://babarkhan811.github.io/agent-atlas/
 
