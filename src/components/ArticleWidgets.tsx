@@ -27,7 +27,7 @@ export function CodeTabs({ files }: { files: { label: string; name: string; code
   return (
     <div className="codetabs">
       <div className="codetabs-bar">
-        <div role="tablist" aria-label="Language" className="codetabs-tabs">
+        <div role="tablist" aria-label="Language" className="codetabs-tabs" style={{ ["--i" as string]: i, ["--n" as string]: files.length }}>
           {files.map((x, k) => (
             <button key={x.label} type="button" role="tab" aria-selected={k === i} id={`code-tab-${k}`} aria-controls="code-panel"
               className={k === i ? "on" : ""} onClick={() => { setI(k); setCopied(false); }}>{x.label}</button>

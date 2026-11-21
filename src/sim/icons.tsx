@@ -12,6 +12,8 @@ function Box({ x, y, z, w, d, h, core }: { x: number; y: number; z: number; w: n
       <polygon className={`${p}r`} points={f.right} />
       <polygon className={`${p}l`} points={f.left} />
       <polygon className={`${p}t`} points={f.top} />
+      {/* Edge highlight where the top meets the two lit faces (single light source). */}
+      <polyline className="edge-hi" points={points([[x, y + d, z + h], [x + w, y + d, z + h], [x + w, y, z + h]])} />
     </>
   );
 }
@@ -27,7 +29,13 @@ function Led({ p, r = 2.4 }: { p: P3; r?: number }) {
   return <circle className="led" cx={cx} cy={cy} r={r} />;
 }
 
-const Shadow = ({ rx = 46 }: { rx?: number }) => <ellipse className="shadow" cx={0} cy={6} rx={rx} ry={rx * 0.46} />;
+// Contact shadow: a soft, dark core (ambient occlusion) inside the coloured floor glow.
+const Shadow = ({ rx = 46 }: { rx?: number }) => (
+  <>
+    <ellipse className="shadow" cx={0} cy={6} rx={rx} ry={rx * 0.46} />
+    <ellipse className="ao" cx={0} cy={4} rx={rx * 0.62} ry={rx * 0.24} />
+  </>
+);
 
 function Server() {
   return (
@@ -208,9 +216,35 @@ function Chat() {
   );
 }
 
+function Key() {
+  return (
+    <>
+      <Shadow rx={42} />
+      <Box x={-24} y={-24} z={0} w={48} d={48} h={8} />
+      <circle className="ft" cx={-10} cy={-34} r={13} />
+      <circle className="fs" cx={-10} cy={-34} r={5} />
+      <path className="fl" d="M1 -38 L30 -38 L30 -30 L24 -30 L24 -25 L18 -25 L18 -30 L1 -30 Z" />
+      <Led p={[0, 0, 8]} r={2} />
+    </>
+  );
+}
+
+function Gauge() {
+  return (
+    <>
+      <Shadow rx={44} />
+      <Box x={-24} y={-24} z={0} w={48} d={48} h={10} />
+      <path className="fl" d="M-30 -14 A30 30 0 0 1 30 -14 L22 -14 A22 22 0 0 0 -22 -14 Z" />
+      <path className="ln glow" d="M-26 -14 A26 26 0 0 1 4 -39" />
+      <line className="eye" x1={0} y1={-14} x2={14} y2={-32} />
+      <circle className="led" cx={0} cy={-14} r={3} />
+    </>
+  );
+}
+
 export const ICONS = {
   server: Server, laptop: Laptop, chip: Chip, robot: Robot, tool: Tool, db: Db, docs: Docs,
-  mail: Mail, browser: Browser, shield: Shield, cloud: Cloud, person: Person, chat: Chat,
+  mail: Mail, browser: Browser, shield: Shield, cloud: Cloud, person: Person, chat: Chat, key: Key, gauge: Gauge,
 } satisfies Record<string, () => ReactElement>;
 export type IconName = keyof typeof ICONS;
 
@@ -221,9 +255,11 @@ const BY_KIND: Record<LessonNode["kind"], IconName> = {
 /** Pick an icon from an explicit override, the node kind, or keywords in its label. */
 export function iconFor(n: Pick<LessonNode, "icon" | "kind" | "label">): IconName {
   if (n.icon && n.icon in ICONS) return n.icon as IconName;
+  const s = n.label.toLowerCase();
+  if (/authori[sz]ation server|identity provider|oauth/.test(s)) return "key";
+  if (/meter|budget/.test(s)) return "gauge";
   if (n.kind === "guard") return "shield";
   if (n.kind === "user") return "person";
-  const s = n.label.toLowerCase();
   if (/laptop/.test(s)) return "laptop";
   if (/server/.test(s) && !/mcp/.test(s)) return /mail/.test(s) ? "mail" : "server";
   if (/inbox|mail/.test(s)) return "mail";

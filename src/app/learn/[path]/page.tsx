@@ -50,7 +50,7 @@ export default async function PathPage({ params }: { params: Promise<Params> }) 
         <ol className="path-lessons">
           {lessons.map((l) => (
             <li key={l.id}>
-              <Link href={lessonHref(l)} className="card-3d path-lesson">
+              <Link href={lessonHref(l)} className="card-3d path-lesson tilt">
                 <span className="pl-n">{l.order}</span>
                 <span className="pl-body">
                   <b>{l.title}</b>

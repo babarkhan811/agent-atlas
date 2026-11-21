@@ -34,6 +34,9 @@ describe("icon selection", () => {
     expect(iconFor({ kind: "data", label: "Vector database" })).toBe("db");
     expect(iconFor({ kind: "tool", label: "MCP server" })).toBe("tool");
     expect(iconFor({ kind: "guard", label: "Detection rules" })).toBe("shield");
+    expect(iconFor({ kind: "guard", label: "Authorization server" })).toBe("key");
+    expect(iconFor({ kind: "tool", label: "Identity provider" })).toBe("key");
+    expect(iconFor({ kind: "data", label: "Usage meter" })).toBe("gauge");
   });
 });
 

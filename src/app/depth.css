@@ -1,0 +1,237 @@
+/* =====================================================================
+   Agent Atlas depth system (Phase 2 / B1)
+   One light source (top-left). Elevation = ambient + key + contact shadow.
+   Motion uses transform/opacity only; reduced motion keeps depth, drops movement.
+   ===================================================================== */
+
+:root,
+:root[data-theme="dark"] {
+  --perspective: 1100px;
+  --tilt-max: 6deg;
+  --press: 2px;
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -1px 0 rgba(0, 0, 0, 0.45);
+  --bevel-strong: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -2px 0 rgba(0, 0, 0, 0.5);
+  --key-edge: #050912;
+  --depth-0: none;
+  --depth-1: var(--bevel), 0 1px 1px rgba(0, 0, 0, 0.45), 0 3px 8px -4px rgba(0, 0, 0, 0.6);
+  --depth-2: var(--bevel), 0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 24px -12px rgba(0, 0, 0, 0.75);
+  --depth-3: var(--bevel), 0 2px 3px rgba(0, 0, 0, 0.45), 0 18px 36px -16px rgba(0, 0, 0, 0.8);
+  --depth-4: var(--bevel-strong), 0 3px 4px rgba(0, 0, 0, 0.5), 0 30px 56px -22px rgba(0, 0, 0, 0.85);
+  --depth-5: var(--bevel-strong), 0 4px 6px rgba(0, 0, 0, 0.5), 0 46px 80px -30px rgba(0, 0, 0, 0.9);
+  --floor-glow: 0 28px 60px -38px color-mix(in srgb, var(--accent) 55%, transparent);
+  /* One glow per curriculum layer. */
+  --glow-model: #e879f9;
+  --glow-knowledge: #22d3ee;
+  --glow-protocols: #fb923c;
+  --glow-agents: #818cf8;
+  --glow-automation: #34d399;
+  --glow-security: #f87171;
+  --glow-safety: #facc15;
+  --glow-ops: #94a3b8;
+  --grid-floor: rgba(56, 189, 248, 0.12);
+}
+:root[data-theme="light"] {
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 0 rgba(15, 30, 70, 0.08);
+  --bevel-strong: inset 0 1px 0 #fff, inset 0 -2px 0 rgba(15, 30, 70, 0.12);
+  --key-edge: #b9c6de;
+  --depth-1: var(--bevel), 0 1px 1px rgba(15, 30, 70, 0.1), 0 3px 8px -4px rgba(15, 30, 70, 0.18);
+  --depth-2: var(--bevel), 0 1px 2px rgba(15, 30, 70, 0.1), 0 10px 24px -12px rgba(15, 30, 70, 0.28);
+  --depth-3: var(--bevel), 0 2px 3px rgba(15, 30, 70, 0.1), 0 18px 36px -16px rgba(15, 30, 70, 0.32);
+  --depth-4: var(--bevel-strong), 0 3px 4px rgba(15, 30, 70, 0.1), 0 30px 56px -22px rgba(15, 30, 70, 0.36);
+  --depth-5: var(--bevel-strong), 0 4px 6px rgba(15, 30, 70, 0.12), 0 46px 80px -30px rgba(15, 30, 70, 0.4);
+  --floor-glow: 0 28px 60px -40px color-mix(in srgb, var(--accent) 40%, transparent);
+  --glow-model: #a21caf;
+  --glow-knowledge: #0e7490;
+  --glow-protocols: #c2410c;
+  --glow-agents: #4f46e5;
+  --glow-automation: #047857;
+  --glow-security: #dc2626;
+  --glow-safety: #a16207;
+  --glow-ops: #475569;
+  --grid-floor: rgba(2, 132, 199, 0.12);
+}
+
+/* ---------- page: perspective grid floor + drifting particles ---------- */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  pointer-events: none;
+  z-index: -1;
+}
+body::before {
+  left: -50%; right: -50%; bottom: -10vh; height: 70vh;
+  background-image:
+    linear-gradient(var(--grid-floor) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-floor) 1px, transparent 1px);
+  background-size: 64px 64px;
+  transform: perspective(600px) rotateX(64deg);
+  transform-origin: center bottom;
+  mask-image: linear-gradient(to top, #000 10%, transparent 85%);
+}
+body::after {
+  inset: 0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 20%, color-mix(in srgb, var(--accent) 70%, transparent) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 68% 34%, color-mix(in srgb, var(--accent-2) 70%, transparent) 50%, transparent 51%),
+    radial-gradient(1px 1px at 38% 72%, color-mix(in srgb, var(--accent) 60%, transparent) 50%, transparent 51%),
+    radial-gradient(1px 1px at 86% 82%, color-mix(in srgb, var(--accent-2) 60%, transparent) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 52% 8%, color-mix(in srgb, var(--accent) 50%, transparent) 50%, transparent 51%);
+  background-size: 640px 640px;
+  opacity: 0.55;
+  animation: drift 60s linear infinite;
+}
+@keyframes drift { to { transform: translate3d(-64px, -640px, 0); } }
+
+/* ---------- surfaces: raised slabs ---------- */
+.panel {
+  box-shadow: var(--depth-3), var(--floor-glow);
+  border-color: color-mix(in srgb, var(--line-2) 70%, var(--line));
+}
+.stage.panel { box-shadow: var(--depth-4), var(--floor-glow); }
+.card-3d, .walk, .quiz-q, .faq, .fields, .codetabs, .art-facts div, .walk-cols > div, .takeaways li {
+  box-shadow: var(--depth-2);
+}
+.art-hero { box-shadow: var(--depth-4), var(--floor-glow); }
+.caption {
+  box-shadow: var(--depth-3);
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
+}
+
+/* ---------- pointer tilt (driven by TiltLayer; desktop pointers only) ---------- */
+.tilt {
+  transform: perspective(var(--perspective)) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(var(--lift, 0px));
+  transition: transform 0.18s ease-out;
+  will-change: auto;
+}
+.tilt.tilting { --lift: -3px; box-shadow: var(--depth-4); transition: transform 0.06s linear; }
+.tilt::after { /* specular highlight that follows the pointer */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at var(--px, 50%) var(--py, 0%), rgba(255, 255, 255, 0.1), transparent 55%);
+  transition: opacity 0.2s;
+}
+.tilt.tilting::after { opacity: 1; }
+.card-3d:hover { transform: none; } /* tilt replaces the old hover lift */
+
+/* ---------- pressable keys ---------- */
+.ctl, .icon-btn, .tab, .layer, .codetabs-bar .copy, .art-toc a, .key, .li-steps button b, .search {
+  position: relative;
+  box-shadow: var(--depth-1), 0 var(--press) 0 var(--key-edge);
+  transform: translateY(0);
+  transition: transform 0.08s ease-out;
+}
+.search { box-shadow: var(--bevel), inset 0 2px 4px rgba(0, 0, 0, 0.25); } /* inputs are recessed, not raised */
+.ctl:hover:not(:disabled), .icon-btn:hover, .tab:hover, .layer:hover, .art-toc a:hover, .codetabs-bar .copy:hover { transform: translateY(-1px); }
+.ctl:active:not(:disabled), .icon-btn:active, .tab:active, .layer:active, .art-toc a:active, .codetabs-bar .copy:active {
+  transform: translateY(var(--press));
+  box-shadow: var(--bevel), 0 0 0 var(--key-edge);
+}
+.ctl.primary { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 80%, #fff), var(--accent)); box-shadow: var(--bevel-strong), 0 var(--press) 0 color-mix(in srgb, var(--accent) 50%, #000), 0 8px 22px -8px var(--accent); }
+.ctl.primary.playing { background: linear-gradient(180deg, color-mix(in srgb, var(--accent-2) 80%, #fff), var(--accent-2)); box-shadow: var(--bevel-strong), 0 var(--press) 0 color-mix(in srgb, var(--accent-2) 50%, #000), 0 8px 22px -8px var(--accent-2); }
+.tab.on, .layer.on { transform: translateY(var(--press)); box-shadow: var(--bevel), 0 0 14px -4px var(--accent); }
+
+/* ---------- segmented toggles with a sliding raised thumb ---------- */
+.seg-toggle, .depth, .codetabs-tabs {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  isolation: isolate;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35), var(--bevel);
+}
+.seg-toggle::before, .depth::before, .codetabs-tabs::before {
+  content: "";
+  position: absolute; z-index: -1; top: 2px; bottom: 2px; left: 2px;
+  width: calc((100% - 4px) / var(--n, 2));
+  border-radius: 4px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 82%, #fff), var(--accent));
+  box-shadow: var(--bevel-strong), 0 2px 0 color-mix(in srgb, var(--accent) 45%, #000), 0 6px 16px -6px var(--accent);
+  transform: translateX(calc(var(--i, 0) * 100%));
+  transition: transform 0.22s cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+.seg-toggle button.on, .depth button.on, .codetabs-bar .codetabs-tabs button.on { background: transparent; box-shadow: none; }
+.codetabs-tabs { border-radius: 6px; padding: 2px; background: var(--bg-2); }
+
+/* ---------- extruded tube progress (timeline) ---------- */
+.timeline input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px; border-radius: 4px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 45%, rgba(0, 0, 0, 0.3)),
+    linear-gradient(90deg, var(--accent) var(--p), var(--line-2) var(--p));
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.timeline input[type="range"]::-webkit-slider-thumb {
+  width: 18px; height: 18px; margin-top: -5px;
+  background: radial-gradient(circle at 35% 30%, #fff 0 18%, var(--accent) 45%, color-mix(in srgb, var(--accent) 50%, #000));
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 12px var(--accent);
+}
+.timeline input[type="range"]::-moz-range-track { height: 8px; border-radius: 4px; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45); }
+.timeline input[type="range"]::-moz-range-progress { height: 8px; border-radius: 4px; }
+
+/* ---------- table rows lift on hover ---------- */
+.tt tbody tr { transition: transform 0.12s ease-out; }
+.tt tbody tr:hover { transform: translateY(-1px); box-shadow: 0 6px 14px -10px rgba(0, 0, 0, 0.6); }
+
+/* ---------- tooltips / hover cards with depth ---------- */
+a.gl:hover::after, a.gl:focus-visible::after { box-shadow: var(--depth-4); animation: pop 0.14s ease-out; }
+@keyframes pop { from { opacity: 0; transform: translateY(4px) scale(0.98); } }
+
+/* ---------- curriculum layer glows ---------- */
+.layer:nth-child(1) { --glow: var(--glow-model); }
+.layer:nth-child(2) { --glow: var(--glow-knowledge); }
+.layer:nth-child(3) { --glow: var(--glow-protocols); }
+.layer:nth-child(4) { --glow: var(--glow-agents); }
+.layer:nth-child(5) { --glow: var(--glow-automation); }
+.layer:nth-child(6) { --glow: var(--glow-security); }
+.layer:nth-child(7) { --glow: var(--glow-safety); }
+.layer:nth-child(8) { --glow: var(--glow-ops); }
+.layer b { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--glow, var(--accent)) 70%, transparent); }
+.layer.on { box-shadow: var(--bevel), 0 0 16px -3px var(--glow, var(--accent)); border-color: var(--glow, var(--accent)); }
+.slab { box-shadow: var(--depth-2), inset 4px 0 0 var(--glow, var(--accent)); }
+.stack-slabs .slab:nth-child(8) { --glow: var(--glow-model); }
+.stack-slabs .slab:nth-child(7) { --glow: var(--glow-knowledge); }
+.stack-slabs .slab:nth-child(6) { --glow: var(--glow-protocols); }
+.stack-slabs .slab:nth-child(5) { --glow: var(--glow-agents); }
+.stack-slabs .slab:nth-child(4) { --glow: var(--glow-automation); }
+.stack-slabs .slab:nth-child(3) { --glow: var(--glow-security); }
+.stack-slabs .slab:nth-child(2) { --glow: var(--glow-safety); }
+.stack-slabs .slab:nth-child(1) { --glow: var(--glow-ops); }
+.slab-n { color: var(--glow, var(--accent)); text-shadow: 0 0 12px color-mix(in srgb, var(--glow, var(--accent)) 55%, transparent); }
+
+/* ---------- diagram icons: single light source + contact shadow ---------- */
+.node .ft { stroke: color-mix(in srgb, var(--c) 70%, #fff); }
+.node .ao { fill: rgba(0, 0, 0, 0.45); filter: blur(3px); }
+:root[data-theme="light"] .node .ao { fill: rgba(15, 30, 70, 0.22); }
+.node .edge-hi { fill: none; stroke: rgba(255, 255, 255, 0.55); stroke-width: 1; stroke-linecap: round; }
+:root[data-theme="light"] .node .edge-hi { stroke: rgba(255, 255, 255, 0.9); }
+
+/* ---------- off-screen pause (set by the diagram's IntersectionObserver) ---------- */
+.paused *, .paused { animation-play-state: paused !important; }
+
+/* ---------- touch: no tilt, 44px targets ---------- */
+@media (hover: none), (pointer: coarse) {
+  .tilt, .tilt.tilting { transform: none; }
+  .tilt::after { display: none; }
+  .ctl, .icon-btn, .tab, .layer, .seg-toggle button, .depth button, .codetabs-bar button, .li-steps button, .key, .jump, .linkish, .art-toc a, .toplink { min-height: 44px; }
+  .tab, .art-toc a { display: inline-flex; align-items: center; }
+}
+
+/* ---------- reduced motion: keep depth, drop movement ---------- */
+@media (prefers-reduced-motion: reduce) {
+  body::after { animation: none; }
+  .tilt, .tilt.tilting, .tt tbody tr:hover, .slab, .slab:hover { transform: none !important; }
+  .ctl:hover, .icon-btn:hover, .tab:hover, .layer:hover { transform: none; }
+  .seg-toggle::before, .depth::before, .codetabs-tabs::before { transition: none; }
+}
+
+/* ---------- reduced transparency / more contrast ---------- */
+@media (prefers-reduced-transparency: reduce) {
+  .topbar, .caption { backdrop-filter: none; background: var(--panel); }
+  body::after { display: none; }
+}
+@media (prefers-contrast: more) {
+  :root { --line: var(--line-2); }
+  .panel, .card-3d, .ctl, .tab, .layer, .key { border-width: 2px; border-color: var(--text); }
+  body::before, body::after { display: none; }
+  .tilt::after { display: none; }
+}

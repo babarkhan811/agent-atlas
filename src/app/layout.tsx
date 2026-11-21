@@ -3,6 +3,8 @@ import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { themeBootScript } from "@/components/ThemeToggle";
 import { SITE_URL, absUrl } from "@/lib/site";
 import "./globals.css";
+import "./depth.css";
+import { TiltLayer } from "@/components/TiltLayer";
 
 // next/font downloads these at build time and serves them from our own origin.
 const sans = Space_Grotesk({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -28,7 +30,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <TiltLayer />
+      </body>
     </html>
   );
 }

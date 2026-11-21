@@ -132,7 +132,7 @@ export function Workspace({ lesson, index }: Props) {
             <div className="eyebrow">{catInfo(lesson.category)[1]} · LESSON {pad(pos + 1)}</div>
             <h1>{lesson.title}</h1>
           </div>
-          <div className="seg-toggle" role="tablist" aria-label="View">
+          <div className="seg-toggle" role="tablist" aria-label="View" style={{ ["--i" as string]: views.findIndex(([v]) => v === view), ["--n" as string]: views.length }}>
             {views.map(([v, label]) => (
               <button key={v} type="button" role="tab" id={`tab-${v}`} aria-selected={view === v} aria-controls="stage-view"
                 tabIndex={view === v ? 0 : -1} className={view === v ? "on" : ""} onClick={() => setView(v)} onKeyDown={onTabKey}>{label}</button>
@@ -180,7 +180,7 @@ export function Workspace({ lesson, index }: Props) {
         <div className="msg-bar">
           <h2 className="panel-title sub">DECODED MESSAGE</h2>
           {hasDepth && (
-            <div className="depth" role="radiogroup" aria-label="Explanation depth">
+            <div className="depth" role="radiogroup" aria-label="Explanation depth" style={{ ["--i" as string]: DEPTHS.findIndex(([d]) => d === depth), ["--n" as string]: DEPTHS.length }}>
               {DEPTHS.map(([d, label]) => (
                 <button key={d} type="button" role="radio" aria-checked={depth === d} className={depth === d ? "on" : ""}
                   onClick={() => setDepth(d)}>{label}</button>

@@ -29,6 +29,7 @@ export function Diagram({ lesson, step, speed, idPrefix = "e", onNode, described
   const pathRefs = useRef(new Map<string, SVGPathElement>());
   const nodeRefs = useRef(new Map<string, SVGGElement>());
   const pkt = useRef<SVGGElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const cap = useRef<SVGGElement>(null);
   const trails = useRef<(SVGCircleElement | null)[]>([]);
 
@@ -73,6 +74,18 @@ export function Diagram({ lesson, step, speed, idPrefix = "e", onNode, described
     return () => cancelAnimationFrame(raf);
   }, [activeKey, s.from, s.to, step, speed, reduce, stage]);
 
+  // Pause SMIL and CSS animations while the diagram is scrolled out of view.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => {
+      if (e?.isIntersecting) { svg.unpauseAnimations(); svg.classList.remove("paused"); }
+      else { svg.pauseAnimations(); svg.classList.add("paused"); }
+    });
+    io.observe(svg);
+    return () => io.disconnect();
+  }, []);
+
   const tw = (40 * C30).toFixed(2), th = (20 * C30).toFixed(2);
   // Descriptions live outside the focusable nodes so each node's name is exactly its visible label.
   const describe = (id: string) => {
@@ -85,7 +98,7 @@ export function Diagram({ lesson, step, speed, idPrefix = "e", onNode, described
 
   return (
     <>
-    <svg className="diagram" viewBox={`0 0 ${stage.w} ${stage.h}`} preserveAspectRatio="xMidYMid meet" role="group"
+    <svg ref={svgRef} className="diagram" viewBox={`0 0 ${stage.w} ${stage.h}`} preserveAspectRatio="xMidYMid meet" role="group"
       aria-label={`Diagram: ${lesson.title}. Step ${step + 1}: ${s.title}`} aria-describedby={describedBy}>
       <defs>
         <pattern id={`${idPrefix}-iso`} width={tw} height="23.09" patternUnits="userSpaceOnUse" patternTransform="scale(1.3)">

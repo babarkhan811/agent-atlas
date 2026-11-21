@@ -22,7 +22,7 @@ export default function GuidePage() {
       <ol className="guide-index">
         {GUIDE_SECTIONS.map((s, i) => (
           <li key={s.slug}>
-            <Link className="card-3d guide-card" href={`/guide/${s.slug}/`}>
+            <Link className="card-3d guide-card tilt" href={`/guide/${s.slug}/`}>
               <span className="pl-n">{i + 1}</span>
               <span className="pl-body"><b>{s.title}</b><span>{s.summary}</span></span>
             </Link>

@@ -161,7 +161,7 @@ export function LessonArticle({ lesson, index, glossary }: Props) {
           <h2 id="related-h">Related lessons</h2>
           <div className="related">
             {lessonLinks(a.related).map((l) => (
-              <Link key={l.id} className="card-3d related-card" href={l.href}><b>{l.title}</b><span>{l.summary}</span></Link>
+              <Link key={l.id} className="card-3d related-card tilt" href={l.href}><b>{l.title}</b><span>{l.summary}</span></Link>
             ))}
           </div>
         </section>

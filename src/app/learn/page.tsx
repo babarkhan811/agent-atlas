@@ -49,7 +49,7 @@ export default function LearnHub() {
             const items = lessons.filter((l) => l.path === p.id);
             const minutes = items.reduce((n, l) => n + (l.article?.minutes ?? 10), 0);
             return (
-              <Link key={p.id} href={`/learn/${p.id}/`} className="card-3d path-card">
+              <Link key={p.id} href={`/learn/${p.id}/`} className="card-3d path-card tilt">
                 <span className={`tier ${p.tier}`}>{p.tier === "free" ? "Free" : "Pro"}</span>
                 <b>{p.order}. {p.title}</b>
                 <span>{p.description}</span>
