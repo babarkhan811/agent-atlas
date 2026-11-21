@@ -4,6 +4,7 @@ import { themeBootScript } from "@/components/ThemeToggle";
 import { SITE_URL, absUrl } from "@/lib/site";
 import "./globals.css";
 import "./depth.css";
+import "./landing.css";
 import { TiltLayer } from "@/components/TiltLayer";
 
 // next/font downloads these at build time and serves them from our own origin.
@@ -13,6 +14,15 @@ const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500", "700"],
 export const metadata: Metadata = {
   metadataBase: new URL(`${SITE_URL}/`),
   alternates: { canonical: absUrl("/") },
+  openGraph: {
+    type: "website",
+    siteName: "Agent Atlas",
+    title: "Agent Atlas · See how AI agents work, one message at a time",
+    description: "Free interactive simulations of how AI agents work, with every message decoded field by field.",
+    url: absUrl("/"),
+    images: [{ url: absUrl("/og.png"), width: 1200, height: 630, alt: "Agent Atlas: the 8-layer agent stack with a message travelling through it" }],
+  },
+  twitter: { card: "summary_large_image", images: [absUrl("/og.png")] },
   manifest: absUrl("/manifest.webmanifest"),
   title: { default: "Agent Atlas · See how AI agents work", template: "%s · Agent Atlas" },
   description:

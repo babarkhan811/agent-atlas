@@ -5,6 +5,7 @@ import type { Lesson } from "@/content/schema";
 import { LessonArticle } from "@/components/LessonArticle";
 import { Workspace } from "@/components/Workspace";
 import { absUrl } from "@/lib/site";
+import { ALL_LESSONS_FREE } from "@/config/pricing";
 
 type Params = { path: string; lesson: string };
 
@@ -37,7 +38,7 @@ function jsonLd(l: Lesson) {
       url,
       learningResourceType: "Interactive simulation and lesson",
       educationalLevel: l.path === "foundations" ? "Beginner" : "Intermediate",
-      isAccessibleForFree: l.tier === "free",
+      isAccessibleForFree: l.tier === "free" || ALL_LESSONS_FREE,
       inLanguage: "en",
       ...(l.lastVerified && { dateModified: l.lastVerified }),
       ...(l.article && { timeRequired: `PT${l.article.minutes}M`, teaches: l.objectives }),

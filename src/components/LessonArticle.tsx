@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Link from "next/link";
+import { ALL_LESSONS_FREE } from "@/config/pricing";
 import type { LessonIndexItem } from "@/content";
 import type { GlossaryTerm, Lesson } from "@/content/schema";
 import { KIND_INFO } from "@/sim/layout";
@@ -67,7 +68,7 @@ export function LessonArticle({ lesson, index, glossary }: Props) {
             {a.prerequisites.length === 0 ? "No prerequisites"
               : lessonLinks(a.prerequisites).map((l, i) => <span key={l.id}>{i > 0 && " · "}<Link href={l.href}>{l.title}</Link></span>)}
           </dd></div>
-          <div><dt>Access</dt><dd>{lesson.tier === "free" ? "Free lesson" : "Pro lesson"}</dd></div>
+          <div><dt>Access</dt><dd>{lesson.tier === "free" ? "Free lesson" : ALL_LESSONS_FREE ? "Free during launch (Pro later)" : "Pro lesson"}</dd></div>
         </dl>
       </header>
 

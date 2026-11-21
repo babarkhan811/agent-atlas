@@ -5,6 +5,7 @@ import { lessonHref, lessonIndex, loadContent } from "@/content";
 import { PageShell } from "@/components/PageShell";
 import { Inline, Prose } from "@/components/Prose";
 import { absUrl } from "@/lib/site";
+import { ALL_LESSONS_FREE } from "@/config/pricing";
 
 type Params = { path: string };
 export const dynamicParams = false;
@@ -30,7 +31,7 @@ export default async function PathPage({ params }: { params: Promise<Params> }) 
     <PageShell index={lessonIndex()}>
       <div className="crumbs"><Link href="/learn/">Learn</Link> / {p.title}</div>
       <div className="lesson-head">
-        <p className="eyebrow">Path {p.order} · {p.tier === "free" ? "Free" : "Pro"} · {lessons.length} lessons · ~{minutes} min</p>
+        <p className="eyebrow">Path {p.order} · {p.tier === "free" ? "Free" : ALL_LESSONS_FREE ? "Free during launch" : "Pro"} · {lessons.length} lessons · ~{minutes} min</p>
         <h1>{p.title}</h1>
         <p><Inline text={p.description} /></p>
       </div>

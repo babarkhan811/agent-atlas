@@ -20,7 +20,7 @@ Source brief: `agent-atlas-phase2-prompt.md` (owner, 2026-11-19).
 | A1 | Content engine + 3 pilot lessons (LLM call, Tool use, Software + AI agents) | **done** (tag `a1`) |
 | A2 | Remaining 18 lessons, glossary pages, guide sub-pages, 6 new lessons, freshness CI | **done** (tag `a2`): 27 lessons on the full anatomy, 20 labs, 52 glossary term pages, 9 guide parts, path pages, /learn hub, About & editorial policy |
 | B1 | Depth design system (tokens, components, both themes, reduced motion, visual regression) | **done** (tag `b1`): `src/app/depth.css` tokens `--depth-0…5`, `--bevel`, `--perspective`, `--tilt-max`, `--glow-<layer>`; pressable keys, sliding-thumb toggles, pointer tilt (`TiltLayer`), tube timeline, row lift, grid floor + particles, icon contact shadows and edge highlights, key/gauge icons; reduced motion/transparency/contrast and touch rules; off-screen animation pause; 24 Linux screenshot baselines |
-| B2 | 3D stage (pan/zoom/orbit, minimap, bigger stage), landing page hero, optional WebGL mode | todo |
+| B2 | 3D stage (pan/zoom/orbit, minimap, bigger stage), landing page hero, optional WebGL mode | **partly done**: landing page with CSS-3D agent-stack hero and live preview shipped for the free public launch (2026-11-21). Stage pan/zoom/orbit, minimap, resizable panels and the WebGL decision are next. |
 | C1 | Pricing, auth, Polar payments, server-side gating + leak test, legal pages, analytics, SEO completion | todo; needs the server deployment (Vercel) |
 | D | Launch hardening: axe, Lighthouse, security review, `LAUNCH_CHECKLIST.md` | todo |
 

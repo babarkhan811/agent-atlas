@@ -3,6 +3,7 @@ import Link from "next/link";
 import { lessonHref, lessonIndex, loadContent } from "@/content";
 import { PageShell } from "@/components/PageShell";
 import { CATS } from "@/lib/cats";
+import { ALL_LESSONS_FREE } from "@/config/pricing";
 import { absUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -50,7 +51,7 @@ export default function LearnHub() {
             const minutes = items.reduce((n, l) => n + (l.article?.minutes ?? 10), 0);
             return (
               <Link key={p.id} href={`/learn/${p.id}/`} className="card-3d path-card tilt">
-                <span className={`tier ${p.tier}`}>{p.tier === "free" ? "Free" : "Pro"}</span>
+                <span className={`tier ${p.tier === "free" || ALL_LESSONS_FREE ? "free" : "pro"}`}>{p.tier === "free" ? "Free" : ALL_LESSONS_FREE ? "Free during launch" : "Pro"}</span>
                 <b>{p.order}. {p.title}</b>
                 <span>{p.description}</span>
                 <em>{items.length} lessons · ~{minutes} min</em>

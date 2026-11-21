@@ -11,6 +11,8 @@ const PAGES = [
   ["path page", "/learn/security/"],
   ["glossary term", "/glossary/rag/"],
   ["about", "/about/"],
+  ["landing", "/"],
+  ["privacy", "/privacy/"],
   ["glossary", "/glossary/"],
   ["404", "/learn/foundations/missing/"],
 ] as const;

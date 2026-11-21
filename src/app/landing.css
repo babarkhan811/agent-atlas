@@ -1,0 +1,116 @@
+/* ---------- site chrome (landing, legal, contact) ---------- */
+.site-top {
+  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 24px;
+  padding: 12px max(16px, calc((100vw - 1200px) / 2));
+  background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.site-nav { display: flex; gap: 4px; margin-left: 12px; }
+.site-nav a { text-decoration: none; color: var(--muted); font: 600 13px var(--font-mono), monospace; padding: 8px 10px; border-radius: 6px; }
+.site-nav a:hover { color: var(--text); background: var(--panel-2); }
+.site-actions { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.site-actions .ctl.primary, .ctl.big { text-decoration: none; display: inline-flex; align-items: center; }
+.site-main { max-width: 1200px; margin: 0 auto; padding: 0 16px 40px; }
+.site-foot {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 24px;
+  padding: 32px max(16px, calc((100vw - 1200px) / 2)); border-top: 1px solid var(--line); background: var(--bg-2);
+}
+.site-foot p { color: var(--muted); margin: 6px 0 0; font-size: 14px; }
+.site-foot nav { display: flex; flex-wrap: wrap; gap: 6px 18px; align-content: start; }
+.site-foot a { color: var(--muted); text-decoration: none; font-size: 14px; }
+.site-foot a:hover { color: var(--text); }
+.ctl.big { height: 48px; padding: 0 20px; font-size: 14px; }
+
+/* ---------- hero ---------- */
+.hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 32px; align-items: center; min-height: min(640px, calc(100vh - 70px)); padding: 32px 0 16px; }
+.hero h1 { font: 700 clamp(34px, 4.6vw, 58px)/1.05 var(--font-sans), sans-serif; letter-spacing: -0.02em; margin: 10px 0 16px; }
+.hero-sub { font-size: 18px; color: var(--muted); max-width: 580px; line-height: 1.6; }
+.hero-ctas { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0 20px; }
+.hero-facts { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px 22px; color: var(--muted); font-size: 14px; }
+.hero-facts b { color: var(--text); font: 700 18px var(--font-mono), monospace; margin-right: 4px; }
+
+/* the 3D agent stack */
+.hero-scene { height: 520px; display: grid; place-items: center; perspective: 1400px; }
+.hero-stack { position: relative; width: 240px; height: 240px; transform-style: preserve-3d; transform: rotateX(58deg) rotateZ(-38deg) translateZ(-120px); }
+.hero-slab {
+  position: absolute; inset: 0; border-radius: 14px; transform-style: preserve-3d;
+  transform: translateZ(calc(var(--k) * 34px));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--glow) 26%, var(--panel)), var(--panel));
+  border: 1px solid color-mix(in srgb, var(--glow) 70%, transparent);
+  box-shadow: 0 0 28px -6px color-mix(in srgb, var(--glow) 60%, transparent), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  transition: transform 0.3s cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+.hero-slab::before, .hero-slab::after { content: ""; position: absolute; background: color-mix(in srgb, var(--glow) 35%, var(--bg)); }
+.hero-slab::before { left: 0; right: 0; bottom: 0; height: 12px; transform-origin: bottom; transform: rotateX(-90deg); border-radius: 0 0 6px 6px; }
+.hero-slab::after { top: 0; bottom: 0; right: 0; width: 12px; transform-origin: right; transform: rotateY(90deg); filter: brightness(0.75); }
+.hero-slab:hover { transform: translateZ(calc(var(--k) * 34px + 22px)); }
+.hero-slab-top { position: absolute; left: 16px; bottom: 14px; display: flex; gap: 8px; align-items: baseline; font: 700 13px var(--font-mono), monospace; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
+.hero-slab-top b { color: var(--glow); font-size: 18px; }
+.hero-orb {
+  position: absolute; left: calc(50% - 9px); top: calc(50% - 9px); width: 18px; height: 18px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff 0 20%, var(--accent) 55%, transparent 72%);
+  box-shadow: 0 0 22px 6px color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: rise 6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+.hero-orb.late { animation-delay: -3s; background: radial-gradient(circle at 35% 35%, #fff 0 20%, var(--accent-2) 55%, transparent 72%); box-shadow: 0 0 22px 6px color-mix(in srgb, var(--accent-2) 60%, transparent); }
+@keyframes rise {
+  0% { transform: translateZ(0) scale(0.6); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateZ(290px) scale(1.1); opacity: 0; }
+}
+
+/* ---------- sections ---------- */
+.land-section { margin-top: 72px; }
+.land-section h2 { font: 700 clamp(24px, 3vw, 34px)/1.15 var(--font-sans), sans-serif; margin: 0 0 10px; letter-spacing: -0.01em; }
+.land-lede { color: var(--muted); max-width: 720px; margin: 0 0 20px; font-size: 16px; }
+.sample { display: flex; flex-direction: column; overflow: hidden; }
+.sample-bar { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.sample-stage { height: clamp(300px, 46vw, 520px); display: block; padding: 0 8px; overflow: hidden; }
+.sample-stage svg.diagram { width: 100%; height: 100%; max-height: 100%; }
+.sample-cap { margin: 0 12px 12px; }
+.sample-cta { align-self: flex-start; margin: 0 12px 16px; text-decoration: none; display: inline-flex; align-items: center; }
+.how { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.how p { color: var(--muted); margin: 6px 0 0; }
+.how-n { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font: 700 15px var(--font-mono), monospace; margin-bottom: 10px; box-shadow: var(--bevel-strong), 0 6px 16px -6px var(--accent); }
+.plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.plan { display: flex; flex-direction: column; gap: 8px; }
+.plan p { margin: 0; color: var(--muted); }
+.plan.on { border-color: var(--accent); box-shadow: var(--depth-3), 0 0 30px -12px var(--accent); }
+.plan .ctl { align-self: flex-start; text-decoration: none; display: inline-flex; align-items: center; margin-top: auto; }
+.price { font: 700 30px var(--font-mono), monospace; color: var(--text) !important; }
+.price small { font-size: 14px; color: var(--muted); }
+.soon { font: 700 10.5px var(--font-mono), monospace; letter-spacing: 0.08em; color: var(--accent-2); border: 1px solid color-mix(in srgb, var(--accent-2) 50%, transparent); border-radius: 4px; padding: 2px 6px; vertical-align: middle; }
+.small { font-size: 13px; }
+.land-section .faq p { color: var(--muted); margin: 0 0 14px; }
+.land-final { text-align: center; padding: 48px 16px; border-radius: 16px; border: 1px solid var(--line-2); box-shadow: var(--depth-3), var(--floor-glow); background: radial-gradient(600px 240px at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%), var(--panel); }
+.land-final .land-lede { margin: 0 auto 20px; }
+
+/* ---------- legal pages ---------- */
+.legal { max-width: 780px; margin: 40px auto; line-height: 1.7; }
+.legal h1 { font: 700 clamp(28px, 3.4vw, 40px)/1.1 var(--font-sans), sans-serif; margin: 0 0 6px; }
+.legal h2 { font: 700 19px var(--font-sans), sans-serif; margin: 28px 0 6px; }
+.legal p { color: color-mix(in srgb, var(--text) 86%, var(--muted)); }
+.legal a { color: var(--accent); }
+.legal .card-3d h2 { margin-top: 0; }
+.legal .card-3d .ctl { text-decoration: none; display: inline-flex; align-items: center; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 960px) {
+  .hero { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .hero-scene { height: 380px; }
+  .hero-stack { transform: rotateX(58deg) rotateZ(-38deg) translateZ(-120px) scale(0.8); }
+  .how, .plans { grid-template-columns: minmax(0, 1fr); }
+  .site-nav { display: none; }
+  .site-foot { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 700px) { .sample-stage { height: 470px; } }
+@media (max-width: 480px) {
+  .site-top .brand-text small { display: none; }
+  .hero-scene { height: 320px; }
+  .hero-stack { transform: rotateX(58deg) rotateZ(-38deg) translateZ(-120px) scale(0.66); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-orb { animation: none; opacity: 0; }
+  .hero-slab, .hero-slab:hover { transition: none; }
+}

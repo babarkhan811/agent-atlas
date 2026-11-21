@@ -18,6 +18,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     // Only written-up glossary terms are indexable.
     ...loadGlossary().filter((t) => t.body).map((t) => ({ url: absUrl(`/glossary/${t.slug}/`), priority: 0.5 })),
     { url: absUrl("/about/"), priority: 0.4 },
+    { url: absUrl("/contact/"), priority: 0.3 },
+    { url: absUrl("/privacy/"), priority: 0.2 },
+    { url: absUrl("/terms/"), priority: 0.2 },
     { url: absUrl("/guide/"), priority: 0.8 },
     ...GUIDE_SECTIONS.map((s) => ({ url: absUrl(`/guide/${s.slug}/`), priority: 0.7 })),
     { url: absUrl("/glossary/"), priority: 0.6 },
