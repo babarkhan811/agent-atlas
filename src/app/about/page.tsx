@@ -51,6 +51,11 @@ export default function About() {
           </ul>
         </section>
 
+        <section id="cybersolution">
+          <h2>Cybersecurity services: Cybersolution</h2>
+          <p>Agent Atlas is made by the team behind <a href="https://cybersolution-sand.vercel.app" rel="noopener" target="_blank">Cybersolution</a>, which offers cybersecurity services, a threat dashboard and security training. The AI for Security Teams path here teaches the same kind of automation that Cybersolution applies in practice.</p>
+        </section>
+
         <section id="corrections">
           <h2>Report an error</h2>
           <p>Found something wrong or out of date? <a href={`${REPO}/issues/new`} rel="noopener noreferrer" target="_blank">Open an issue on GitHub</a> with the lesson name and step number. Corrections are made in public, and the full change history is in the <a href={`${REPO}/commits/main`} rel="noopener noreferrer" target="_blank">update log</a>.</p>

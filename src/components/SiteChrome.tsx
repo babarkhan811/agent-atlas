@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 
 const REPO = "https://github.com/babarkhan811/agent-atlas";
+export const CYBERSOLUTION_URL = "https://cybersolution-sand.vercel.app";
 
 export function SiteHeader() {
   return (
@@ -36,6 +37,7 @@ export function SiteFooter() {
       <div>
         <b>Agent Atlas</b>
         <p>Interactive simulations of how AI agents work, message by message.</p>
+        <p className="sister">From the same team: <a href={CYBERSOLUTION_URL} rel="noopener" target="_blank">Cybersolution</a>, cybersecurity services and training.</p>
       </div>
       <nav aria-label="Footer">
         <Link href="/learn/">Curriculum</Link>

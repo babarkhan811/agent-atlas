@@ -114,3 +114,6 @@
   .hero-orb { animation: none; opacity: 0; }
   .hero-slab, .hero-slab:hover { transition: none; }
 }
+
+.site-foot .sister { margin-top: 10px; }
+.site-foot .sister a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
